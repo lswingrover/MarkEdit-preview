@@ -46,6 +46,21 @@ export function enableWysiwyg(): void {
   preview.classList.add('wysiwyg-active');
   preview.addEventListener('input', onPreviewInput);
   injectToolbar(preview);
+
+  // Dynamically offset the toolbar to match the pane's actual computed padding,
+  // instead of relying on the hardcoded -25px in toolbar.css.
+  const cs = getComputedStyle(preview);
+  const pt = parseFloat(cs.paddingTop) || 0;
+  const pl = parseFloat(cs.paddingLeft) || 0;
+  const pr = parseFloat(cs.paddingRight) || 0;
+  const toolbar = preview.querySelector<HTMLElement>('.wysiwyg-toolbar');
+  if (toolbar !== null) {
+    toolbar.style.top = `-${pt}px`;
+    toolbar.style.marginTop = `-${pt}px`;
+    toolbar.style.marginLeft = `-${pl}px`;
+    toolbar.style.marginRight = `-${pr}px`;
+  }
+
   invalidateBlockCache(); // toolbar shifts block offsetTops
   preview.focus();
 }

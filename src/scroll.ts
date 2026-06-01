@@ -1,16 +1,7 @@
-
-/**
- * Called by the WYSIWYG module after each preview re-render to signal that
- * any cached block-position data should be discarded.
- *
- * This is a no-op in the base implementation. If PR #121 (BlockEntry cache
- * optimisation) is merged first, this stub will be replaced by the real
- * invalidation function in that PR.
- */
-export function invalidateBlockCache(): void { /* no-op */ }
 import { MarkEdit } from 'markedit-api';
 import { getBlockRange, getElementTop, scrollToElement, scrollToPosition } from './shared/utils';
 import { syncScroll } from './support/settings';
+import { isWysiwyg } from './wysiwyg';
 
 // ── BlockEntry index ──────────────────────────────────────────────────────────
 // Built once after each render; avoids per-frame querySelectorAll and parseInt.
@@ -79,6 +70,7 @@ export function startObserving(editorPane: HTMLElement, previewPane: HTMLElement
   if ('onscrollend' in window) {
     editorPane.addEventListener('scrollend', () => {
       if (scrollSource === 'preview') { return; }
+      if (isWysiwyg()) { return; }
       setScrollSource('editor');
       syncScrollProgress(editorPane, previewPane);
     }, { passive: true });
@@ -94,6 +86,7 @@ export function startObserving(editorPane: HTMLElement, previewPane: HTMLElement
 
     editorPane.addEventListener('scroll', () => {
       if (scrollSource === 'preview') { return; }
+      if (isWysiwyg()) { return; }
       if (editorRaf !== undefined) { cancelAnimationFrame(editorRaf); }
       editorRaf = requestAnimationFrame(() => {
         setScrollSource('editor');
