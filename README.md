@@ -1,97 +1,66 @@
-# MarkEdit-preview
+# MarkEdit-preview (lswingrover fork)
 
-Markdown preview for [MarkEdit](https://github.com/MarkEdit-app/MarkEdit) that leverages [markedit-api](https://github.com/MarkEdit-app/MarkEdit-api).
+A fork of [MarkEdit-app/MarkEdit-preview](https://github.com/MarkEdit-app/MarkEdit-preview) that adds two features the upstream maintainer chose not to include: **WYSIWYG editing** and **bidirectional scroll sync**.
+
+These aren't oversights. The upstream maintainer doesn't use WYSIWYG and doesn't want to maintain code he'll never need. Bidirectional scroll is intentionally absent — it's theoretically imperfect, and he edits more than he reads. Both are the right calls for the upstream project. This fork exists for users who want the features anyway.
+
+Everything else — rendering, themes, math, mermaid, settings — is identical to upstream.
+
+---
+
+## What this fork adds
+
+### WYSIWYG editing
+
+Adds a toggleable WYSIWYG mode that makes the preview pane directly editable, with a sticky formatting toolbar at the top.
+
+**Toolbar actions:** H1 / H2 / H3, Bold, Italic, Strikethrough, Inline code, Code block, Blockquote, Unordered list, Ordered list, Link, Horizontal rule
+
+**Toggle:** Extensions → Markdown Preview → WYSIWYG Editing
+
+**How it works:**
+
+1. The preview pane becomes `contentEditable`
+2. On every edit, [Turndown](https://github.com/mixmark-io/turndown) (+ GFM plugin) converts the HTML back to Markdown and pushes it to the CodeMirror source via `MarkEdit.editorAPI.setText()`
+3. A 600ms render lock suppresses the standard re-render cycle while typing, preventing cursor position from being destroyed by `innerHTML` replacement
+
+The source editor stays canonical. WYSIWYG is a convenient input layer, not a replacement.
+
+**Design decisions:**
+
+- **`execCommand` for formatting** — Deprecated in spec but fully functional in WebKit, which is what MarkEdit uses. Avoids complex Range manipulation for common operations.
+- **Turndown for HTML→MD** — Battle-tested and GFM-aware. Round-trip isn't perfect for complex tables and footnotes, but handles common formatting cleanly.
+- **Render lock over DOM diffing** — The 600ms lock is simpler than morphdom or similar and sufficient, since `renderHtmlPreview` already has a 500ms debounce. Lock (600ms) > debounce (500ms), so renders are always suppressed during active typing.
+- **No core changes** — Everything lives in the extension layer using `markedit-api` as designed.
+
+**Known limitations:**
+- Complex tables and footnotes may not round-trip cleanly through Turndown
+- Undo history accumulates one entry per keystroke in WYSIWYG mode
+
+---
+
+### Bidirectional scroll sync + hot path optimizations
+
+Upstream syncs editor→preview only. This fork adds the reverse direction, plus several scroll performance improvements.
+
+**Bidirectional sync** — A `requestAnimationFrame`-based listener on the preview pane syncs back to the editor when you scroll the preview side. Uses a `ScrollSource` lock with a 150ms reset to prevent feedback loops between the two listeners.
+
+A note on approach: `scrollend` only fires after momentum fully stops, so during a fast trackpad swipe the preview sits frozen until you lift off. This fork uses `scroll` + RAF for real-time frame-by-frame tracking instead. The final position is the same; the feel is significantly more responsive.
+
+**`{ passive: true }` on all listeners** — Without this flag, the browser must wait for JS to return before committing each scroll frame. One flag, measurable difference.
+
+**Pre-parsed `BlockEntry` index** — `querySelectorAll('[data-line-from]')` and `parseInt(dataset.lineFrom)` previously ran on every scroll frame. This fork builds a typed `BlockEntry[]` index once after each render, caches it, and invalidates it when `innerHTML` is replaced. Eliminates repeated DOM traversal and string parsing from the hot path.
+
+**Binary search for block lookup** — `proposeTargetBlock` previously used a linear `Array.find`. Since blocks are ordered by `data-line-from`, a binary search is O(log n) with no behavioral change.
+
+**CodeMirror internal metrics in `getScrollProgress`** — The previous implementation called `editor.domAtPos()` → `getClosestLine()` → two `getBoundingClientRect()` calls per frame. `editor.lineBlockAtHeight()` already returns `block.top` and `block.height` — using those directly gives the same fractional progress with zero DOM reads or forced reflows.
+
+---
 
 ## Installation
 
-Copy [dist/markedit-preview.js](dist/markedit-preview.js?raw=true) to `~/Library/Containers/app.cyan.markedit/Data/Documents/scripts/`. Details [here](https://github.com/MarkEdit-app/MarkEdit/wiki/Customization#entries).
+Copy [`dist/markedit-preview.js`](dist/markedit-preview.js?raw=true) to `~/Library/Containers/app.cyan.markedit/Data/Documents/scripts/`. Restart MarkEdit.
 
-Use [dist/lite/markedit-preview.js](dist/lite/markedit-preview.js?raw=true) if you don't need [mermaid](https://mermaid.js.org/), [katex](https://katex.org/) and [highlight.js](https://highlightjs.org/); it's much smaller (about 250 KB, compared to about 5 MB for the full build).
+## Everything else
 
-> Once installed, restart MarkEdit to apply the changes.
->
-> This extension automatically checks for updates and notifies you when a new version is available.
-
-## Building
-
-Run `yarn install && yarn build` to build and deploy the script.
-
-To build the lite version, run `yarn build:lite` instead.
-
-## Development
-
-- `yarn test` — run tests
-- `yarn lint` — run linting (also runs automatically before build)
-
-## How to Use
-
-Access it from the `Extensions` menu in the menu bar, or use the keyboard shortcut <kbd>Shift–Command–V</kbd>.
-
-<img src="./screenshot.png" width="520" alt="Using MarkEdit-preview">
-
-To display local images, please ensure you're using MarkEdit 1.24.0 or later and follow [the guide](https://github.com/MarkEdit-app/MarkEdit/wiki/Customization#grant-folder-access) to grant file access.
-
-This extension also exposes global functions, `MarkEditGetHtml(styled: boolean) => Promise<string>` and `MarkEditRenderHtml(markdown: string, styled: boolean) => Promise<string>`, allowing other extensions or scripts to easily generate the rendered HTML — either from the current document or from arbitrary markdown input.
-
-## Styling
-
-This extension applies the [github-markdown](https://github.com/sindresorhus/github-markdown-css) styling. You can customize the appearance by following the [customization](https://github.com/MarkEdit-app/MarkEdit/wiki/Customization) guidelines.
-
-The preview pane can be styled using the `markdown-body` CSS class.
-
-## Settings
-
-In [settings.json](https://github.com/MarkEdit-app/MarkEdit/wiki/Customization#advanced-settings), you can define a settings node named `extension.markeditPreview` to configure this extension, default settings are:
-
-```json
-{
-  "extension.markeditPreview": {
-    "updateBehavior": "quiet",
-    "syncScroll": true,
-    "hidePreviewButtons": true,
-    "syntaxAutoDetect": false,
-    "imageHoverPreview": false,
-    "themeName": "github",
-    "styledHtmlColorScheme": "auto",
-    "mathDelimiters": [],
-    "changeMode": {
-      "modes": ["side-by-side", "preview"],
-      "hotKey": {
-        "key": "V",
-        "modifiers": ["Command"]
-      }
-    },
-    "markdownIt": {
-      "preset": "default",
-      "options": {}
-    }
-  }
-}
-```
-
-- `updateBehavior`: `"automatic"` downloads and installs the latest build in place, `"quiet"` shows a button, `"notify"` shows an alert, `"never"` disables update checks.
-- `syncScroll`: Whether to enable scroll synchronization.
-- `hidePreviewButtons`: Whether to hide the built-in preview buttons in side-by-side mode (not applicable for lite build).
-- `syntaxAutoDetect`: Whether to enable automatic language detection for syntax highlighting in code blocks (not applicable for lite build).
-- `imageHoverPreview`: Whether to enable image preview on hover.
-- `themeName`: Set the preview color theme, available themes can be found in the [`styles/themes`](styles/themes) folder. Use `"none"` to disable preview styling and render the raw HTML.
-- `styledHtmlColorScheme`: Determine the color scheme of saving styled html files, valid values are `light`, `dark`, and `auto`.
-- `mathDelimiters`: Customize math delimiters for KaTeX rendering (not applicable for lite build), each delimiter object has `left`, `right`, and `display` properties, defaults to `$...$`, `$$...$$`, `\(...\)`, and `\[...\]`.
-- `changeMode.modes`: Define available preview modes for the "Change Mode" feature.
-- `changeMode.hotKey`: Assign keyboard shortcuts for mode switching. See the specification [here](https://github.com/MarkEdit-app/MarkEdit/wiki/Customization#generalmainwindowhotkey).
-- `markdownIt.preset`: Override the default [markdown-it](https://markdown-it.github.io/markdown-it/#MarkdownIt.new) preset.
-- `markdownIt.options`: Customize [markdown-it](https://markdown-it.github.io/markdown-it/#MarkdownIt.new) options.
-
-> [!TIP]
->
-> Extension settings require MarkEdit 1.24.0 or later.
->
-> To add menu items to the toolbar, see MarkEdit [Customization](https://github.com/MarkEdit-app/MarkEdit/wiki/Customization#editorcustomtoolbaritems) wiki.
-
-## Community Extensions
-
-- [Direct Preview](https://github.com/Squarelight-ai/markedit-direct-preview) (by [@Squarelight-ai](https://github.com/Squarelight-ai)): A setup helper that provides a one-click setup for a two-mode Edit/Preview toggle by configuring the toolbar item and `changeMode.modes` for you.
-
-## Contribution
-
-Pull requests are welcome, but please discuss the proposal before making changes. This helps avoid misunderstandings and saves effort on both sides.
+Settings, themes, building, styling, math, mermaid — see the [upstream README](https://github.com/MarkEdit-app/MarkEdit-preview#readme).
