@@ -25,6 +25,14 @@ const requireShim = '"use strict";' + transformSync(readFileSync(shimPath, 'utf8
 }).code.trim();
 
 export default defineConfig(mergeConfig(defaultViteConfig({ outDir }), {
+  resolve: {
+    // markedit-katex ships only TypeScript source; its exports map points to
+    // ./src/index.ts which Vite 7 can't resolve via the exports field. Alias
+    // directly to the source file so Vite handles transpilation itself.
+    alias: {
+      'markedit-katex': fileURLToPath(new URL('./node_modules/markedit-katex/src/index.ts', import.meta.url)),
+    },
+  },
   define: {
     __PKG_VERSION__: JSON.stringify(mainPackage.version),
     __FULL_BUILD__: JSON.stringify(!liteBuild),
