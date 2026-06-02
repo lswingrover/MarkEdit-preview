@@ -56,7 +56,7 @@ export function enableWysiwyg(): void {
   const pr = parseFloat(cs.paddingRight) || 0;
   const toolbar = preview.querySelector<HTMLElement>('.wysiwyg-toolbar');
   if (toolbar !== null) {
-    toolbar.style.top = `-${pt}px`;
+    toolbar.style.top = '0px';
     toolbar.style.marginTop = `-${pt}px`;
     toolbar.style.marginLeft = `-${pl}px`;
     toolbar.style.marginRight = `-${pr}px`;

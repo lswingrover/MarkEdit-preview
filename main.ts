@@ -168,6 +168,8 @@ if (hasFullHost()) {
     renderHtmlPreview();
     renderDecorationViews();
     startObserving(getEditPane(), getPreviewPane());
+    // Auto-enable WYSIWYG by default
+    enableWysiwyg();
 
     if (states.keyDownListener !== undefined) {
       document.removeEventListener('keydown', states.keyDownListener);
