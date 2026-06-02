@@ -14,7 +14,7 @@ import TurndownService from 'turndown';
 // @ts-expect-error no bundled types; @types/turndown covers TurndownService only
 import { gfm } from 'turndown-plugin-gfm';
 import { MarkEdit } from 'markedit-api';
-import { getPreviewPane, setWysiwygEditLock, renderHtmlPreview } from './view';
+import { getPreviewPane, setWysiwygEditLock, setPostRenderHook, renderHtmlPreview } from './view';
 import { invalidateBlockCache } from './scroll';
 import { createToolbar, removeToolbar } from './toolbar';
 
@@ -46,6 +46,7 @@ export function enableWysiwyg(): void {
   preview.classList.add('wysiwyg-active');
   preview.addEventListener('input', onPreviewInput);
   injectToolbar(preview);
+  setPostRenderHook(() => injectToolbar(getPreviewPane()));
 
   // Dynamically offset the toolbar to match the pane's actual computed padding,
   // instead of relying on the hardcoded -25px in toolbar.css.
@@ -78,6 +79,7 @@ export function disableWysiwyg(): void {
   preview.classList.remove('wysiwyg-active');
   preview.removeEventListener('input', onPreviewInput);
   removeToolbar(preview);
+  setPostRenderHook(undefined);
   invalidateBlockCache(); // toolbar removal restores block offsetTops
   renderHtmlPreview();
 }

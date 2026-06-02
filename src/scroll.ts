@@ -65,44 +65,30 @@ function setScrollSource(source: ScrollSource) {
 export function startObserving(editorPane: HTMLElement, previewPane: HTMLElement) {
   if (!syncScroll) { return; }
 
-  // Use scrollend when available (no debounce needed); fall back to RAF.
-  // passive: true lets the browser scroll immediately without waiting for JS.
-  if ('onscrollend' in window) {
-    editorPane.addEventListener('scrollend', () => {
-      if (scrollSource === 'preview') { return; }
-      if (isWysiwyg()) { return; }
-      setScrollSource('editor');
-      syncScrollProgress(editorPane, previewPane);
-    }, { passive: true });
+  // Use scroll + RAF for real-time frame-by-frame tracking.
+  // scrollend only fires after momentum fully stops — too laggy on trackpad.
+  // passive: true lets the browser commit each frame without waiting for JS.
+  let editorRaf: ReturnType<typeof requestAnimationFrame> | undefined;
+  let previewRaf: ReturnType<typeof requestAnimationFrame> | undefined;
 
-    previewPane.addEventListener('scrollend', () => {
-      if (scrollSource === 'editor') { return; }
+  editorPane.addEventListener('scroll', () => {
+    if (scrollSource === 'preview') { return; }
+    if (isWysiwyg()) { return; }
+    if (editorRaf !== undefined) { cancelAnimationFrame(editorRaf); }
+    editorRaf = requestAnimationFrame(() => {
+      setScrollSource('editor');
+      syncScrollProgress(editorPane, previewPane, false);
+    });
+  }, { passive: true });
+
+  previewPane.addEventListener('scroll', () => {
+    if (scrollSource === 'editor') { return; }
+    if (previewRaf !== undefined) { cancelAnimationFrame(previewRaf); }
+    previewRaf = requestAnimationFrame(() => {
       setScrollSource('preview');
       syncPreviewToEditor(previewPane, editorPane);
-    }, { passive: true });
-  } else {
-    let editorRaf: ReturnType<typeof requestAnimationFrame> | undefined;
-    let previewRaf: ReturnType<typeof requestAnimationFrame> | undefined;
-
-    editorPane.addEventListener('scroll', () => {
-      if (scrollSource === 'preview') { return; }
-      if (isWysiwyg()) { return; }
-      if (editorRaf !== undefined) { cancelAnimationFrame(editorRaf); }
-      editorRaf = requestAnimationFrame(() => {
-        setScrollSource('editor');
-        syncScrollProgress(editorPane, previewPane, false);
-      });
-    }, { passive: true });
-
-    previewPane.addEventListener('scroll', () => {
-      if (scrollSource === 'editor') { return; }
-      if (previewRaf !== undefined) { cancelAnimationFrame(previewRaf); }
-      previewRaf = requestAnimationFrame(() => {
-        setScrollSource('preview');
-        syncPreviewToEditor(previewPane, editorPane);
-      });
-    }, { passive: true });
-  }
+    });
+  }, { passive: true });
 }
 
 export function syncScrollProgress(sourcePane: HTMLElement, targetPane: HTMLElement, animated = true) {

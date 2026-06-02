@@ -187,6 +187,12 @@ export function setWysiwygEditLock(locked: boolean): void {
   states.wysiwygEditLock = locked;
 }
 
+/** Registered by wysiwyg.ts to re-inject the toolbar after innerHTML replacement. */
+let postRenderHook: (() => void) | undefined;
+export function setPostRenderHook(fn: (() => void) | undefined): void {
+  postRenderHook = fn;
+}
+
 export async function renderHtmlPreview() {
   // Suppress re-render while the user is editing in the WYSIWYG pane.
   if (states.wysiwygEditLock) {
@@ -198,6 +204,7 @@ export async function renderHtmlPreview() {
 
   const html = replaceImageURLs(await getRenderedHtml());
   previewPane.innerHTML = html;
+  postRenderHook?.();
   invalidateBlockCache();
   requestAnimationFrame(() => {
     warmBlockCache(previewPane);
