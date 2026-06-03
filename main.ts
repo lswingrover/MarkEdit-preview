@@ -50,6 +50,7 @@ if (window.__markeditPreviewInitialized__) {
       MarkEdit.onAppReady(() => {
         copyToSharedContainer();
         setTimeout(() => void checkForUpdates(), 2000);
+        void checkForkUpstream();
       });
     } else {
       // No onAppReady: this runs on every document load, so throttle it
@@ -239,6 +240,32 @@ function renderDecorationViews() {
   if (updatePill !== undefined) {
     updatePill.style.display = currentViewMode() === ViewMode.edit ? 'none' : '';
   }
+}
+
+
+// ── Upstream fork-update check ─────────────────────────────────────────────
+// The fork bumped the version to prevent auto-update from overwriting our
+// customizations. This separate check watches the REAL upstream for new
+// releases and alerts Louis to merge + rebuild via update.sh.
+const FORK_UPSTREAM_BASE = '1.8.0'; // last upstream version merged into fork
+
+async function checkForkUpstream(): Promise<void> {
+  try {
+    const res = await fetch('https://api.github.com/repos/MarkEdit-app/MarkEdit-preview/releases/latest');
+    if (!res.ok) { return; }
+    const data = await res.json() as { tag_name: string };
+    const upstream = data.tag_name.replace(/^v/, '');
+    const notifiedKey = `fork-upstream-notified-${upstream}`;
+    // Only alert once per upstream version
+    if (upstream > FORK_UPSTREAM_BASE && localStorage.getItem(notifiedKey) === null) {
+      localStorage.setItem(notifiedKey, '1');
+      await MarkEdit.showAlert({
+        title: `Upstream MarkEdit-preview ${upstream} Available`,
+        message: `The upstream shipped v${upstream}. Say "update markedit" in Cowork or run:\n  cd ~/Developer/markedit-preview && bash update.sh`,
+        buttons: ['Got it'],
+      });
+    }
+  } catch { /* ignore network errors */ }
 }
 
 const states: {
