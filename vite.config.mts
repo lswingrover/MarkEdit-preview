@@ -24,7 +24,7 @@ const requireShim = '"use strict";' + transformSync(readFileSync(shimPath, 'utf8
   sourcefile: 'shim.ts',
 }).code.trim();
 
-export default defineConfig(mergeConfig(defaultViteConfig({ outDir }), {
+export default defineConfig(mergeConfig(defaultViteConfig({ outDir, destDir: 'Library/Group Containers/group.app.cyan.markedit/Shared/scripts/' }), {
   resolve: {
     // markedit-katex ships only TypeScript source; its exports map points to
     // ./src/index.ts which Vite 7 can't resolve via the exports field. Alias
