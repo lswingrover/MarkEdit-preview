@@ -6,6 +6,7 @@ type LocalizableKeys = {
   previewMode: string;
   saveCleanHtml: string;
   saveStyledHtml: string;
+  printRendered: string;
   copyHtml: string;
   copyRichText: string;
   copyCode: string;
@@ -32,6 +33,7 @@ const strings: Record<Locale, Localizable> = {
     previewMode: 'Preview Mode',
     saveCleanHtml: 'Save Clean HTML',
     saveStyledHtml: 'Save Styled HTML',
+    printRendered: 'Print Rendered…',
     copyHtml: 'Copy HTML',
     copyRichText: 'Copy Rich Text',
     copyCode: 'Copy Code',
@@ -56,6 +58,7 @@ const strings: Record<Locale, Localizable> = {
     previewMode: '预览模式',
     saveCleanHtml: '保存无样式 HTML',
     saveStyledHtml: '保存带样式 HTML',
+    printRendered: '打印渲染…',
     copyHtml: '复制 HTML',
     copyRichText: '复制富文本',
     copyCode: '复制代码',
@@ -77,6 +80,7 @@ const strings: Record<Locale, Localizable> = {
     changeMode: '切換模式',
     saveCleanHtml: '儲存無樣式 HTML',
     saveStyledHtml: '儲存帶樣式 HTML',
+    printRendered: '列印渲染…',
     copyHtml: '拷貝 HTML',
     copyRichText: '複製富文字',
     copyCode: '拷貝程式碼',

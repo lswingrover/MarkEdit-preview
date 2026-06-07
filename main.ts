@@ -14,6 +14,7 @@ import {
   handlePageZoom,
   saveCleanHtml,
   saveStyledHtml,
+  printRendered,
   copyHtml,
   copyRichText,
   getEditPane,
@@ -231,6 +232,10 @@ function createHtmlItems(): MenuItem[] {
       title: localized('saveStyledHtml'),
       action: saveStyledHtml,
     },
+    {
+      title: localized('printRendered'),
+      action: printRendered,
+    },
     ...copyItems,
   ];
 }
@@ -241,7 +246,6 @@ function renderDecorationViews() {
     updatePill.style.display = currentViewMode() === ViewMode.edit ? 'none' : '';
   }
 }
-
 
 // ── Upstream fork-update check ─────────────────────────────────────────────
 // The fork bumped the version to prevent auto-update from overwriting our

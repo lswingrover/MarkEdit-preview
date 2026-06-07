@@ -257,6 +257,33 @@ export function saveCleanHtml() {
   saveGeneratedHtml(false);
 }
 
+export async function printRendered(): Promise<void> {
+  const styledHtml = await generateStaticHtml(true);
+
+  // Inject auto-print + self-close so the browser shows the system print
+  // dialog immediately and closes the tab when done.
+  const printHtml = styledHtml.replace(
+    '</body>',
+    '<script>window.addEventListener("load",()=>{window.print();});window.addEventListener("afterprint",()=>{window.close();});<\/script></body>',
+  );
+
+  // MarkEdit has home-relative-path.read-write: / entitlement — it can write
+  // anywhere under the real home. The sandboxed home path contains the real
+  // home as a prefix; strip the container suffix to recover it.
+  // Write to a hidden dotfile so it never clutters the user's filesystem.
+  const sandboxedHome = MarkEdit.getDirectoryPath('home');
+  const realHome = sandboxedHome.replace(/\/Library\/Containers\/[^/]+\/Data\/?$/, '');
+  const filePath = realHome + '/.markedit-print.html';
+
+  const wrote = await MarkEdit.createFile({ path: filePath, string: printHtml, overwrites: true });
+  if (!wrote) {
+    await MarkEdit.showSavePanel({ string: printHtml, fileName: 'print-rendered.html' });
+    return;
+  }
+
+  await MarkEdit.runService('Open URL', 'file://' + filePath);
+}
+
 export function saveStyledHtml() {
   saveGeneratedHtml(true);
 }

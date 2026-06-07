@@ -1,5 +1,5 @@
 import { MarkEdit } from 'markedit-api';
-import type { JSONObject, JSONValue } from 'markedit-api';
+import type { JSONValue } from 'markedit-api';
 import type { PresetName } from 'markdown-it';
 import type { ColorScheme } from '../shared/types';
 
@@ -41,7 +41,7 @@ export const markdownItPreset = (markdownIt.preset ?? Constants.defaultPreset) a
 export const markdownItOptions = toObject(markdownIt.options);
 
 function toObject(jsonValue: JSONValue, defaultValue = {}) {
-  return (jsonValue ?? defaultValue) as JSONObject;
+  return jsonValue ?? defaultValue;
 }
 
 function toBoolean(jsonValue: JSONValue, defaultValue = true) {

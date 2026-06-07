@@ -4,6 +4,7 @@ A downstream fork of [MarkEdit-app/MarkEdit-preview](https://github.com/MarkEdit
 
 - **Lock-step scroll sync** — editor and preview track each other in real time, every animation frame, using RAF. No lag, no post-scroll drift. Upstream uses `scrollend` (fires after momentum stops); this fires on every `scroll` event.
 - **WYSIWYG editing** — the preview pane becomes directly editable with a sticky formatting toolbar. Edits convert back to Markdown via Turndown (GFM-aware) and sync to the CodeMirror source. Active by default.
+- **Print Rendered…** — prints the styled preview HTML (not raw Markdown) via the system print dialog. Available in the preview toolbar menu. Writes a temporary `~/.markedit-print.html` dotfile, opens it in the default browser, which shows the print dialog immediately on load and auto-closes the tab when done.
 
 These are deliberate upstream non-features, not oversights. This fork exists for users who want them anyway.
 
@@ -21,6 +22,22 @@ These are deliberate upstream non-features, not oversights. This fork exists for
 | Gap handling | None | Interpolates across blank lines and non-block content |
 
 **Block cache:** `[data-line-from]` elements are indexed once after each render — line ranges, top offsets, and heights pre-computed. The cache is invalidated and rebuilt via `MutationObserver` after every `renderHtmlPreview()` call.
+
+### Print Rendered'''...
+
+**Toolbar menu:** Extensions → (preview toolbar) → Print Rendered'''...
+
+Generates the same styled HTML as *Save Styled HTML* but instead of saving a file, it:
+
+1. Injects `window.print()` on `load` and `window.close()` on `afterprint` into the document
+2. Writes the result to `~/.markedit-print.html` (a hidden dotfile — never clutters your filesystem)
+3. Opens it in your default browser via `runService('Open URL', ...)`
+
+The browser shows the macOS print dialog immediately. When you dismiss it (print or cancel), the tab closes automatically.
+
+**Fallback:** if writing the dotfile fails (permissions edge case), the standard Save panel appears instead so you can save and print manually.
+
+---
 
 ### WYSIWYG editing
 
@@ -57,7 +74,7 @@ osascript -e 'quit app "MarkEdit"' -e 'delay 1' -e 'launch app "MarkEdit"'
 
 > **Note:** `LITE_BUILD=true` skips KaTeX and Mermaid due to a broken `markedit-katex` package install (`src/index.ts` missing). The lite build includes all core markdown features plus scroll sync and WYSIWYG. If you need math rendering, fix the `markedit-katex` dependency and run `yarn vite build` without the env var.
 
-The version is pinned at `1.8.1` (upstream is `1.8.0`) to prevent MarkEdit's built-in auto-updater from overwriting the fork with the upstream build.
+The version is pinned at `1.8.2` (upstream is `1.8.0`) to prevent MarkEdit's built-in auto-updater from overwriting the fork with the upstream build.
 
 ---
 
@@ -101,11 +118,13 @@ MarkEdit.app (native Swift/AppKit)
 
 | File | Change |
 |------|--------|
-| `main.ts` | Auto-enable WYSIWYG; `checkForkUpstream()` update alert |
+| `main.ts` | Auto-enable WYSIWYG; `checkForkUpstream()` update alert; Print Rendered menu item |
+| `src/view.ts` | `printRendered()` — writes styled HTML dotfile + opens browser to print |
+| `src/shared/strings.ts` | `printRendered` locale strings (EN / zh-Hans / zh-Hant) |
 | `src/scroll.ts` | RAF-based `startObserving()`; `BlockEntry` cache with `warmBlockCache()` / `invalidateBlockCache()` |
 | `src/wysiwyg.ts` | WYSIWYG mode; sticky toolbar fix (`top: 0px`) |
 | `src/toolbar.ts` | Toolbar DOM + CSS (new file); `top: 0` sticky CSS |
-| `package.json` | Version bumped to `1.8.1` |
+| `package.json` | Version bumped to `1.8.2` |
 | `vite.config.mts` | `markedit-katex` alias for Yarn 1 + Vite 7 compat |
 
 **Upstream remote** is wired as `upstream`. Pull updates with:
