@@ -7,6 +7,7 @@ import { hidePreviewButtons, previewModes } from './support/settings';
 import { localized } from './shared/strings';
 import { syncScrollProgress, invalidateBlockCache, warmBlockCache } from './scroll';
 import { resolveTaskToggle } from './features/task';
+import { isWysiwyg } from './wysiwyg';
 import { ClassNames, CacheKeys } from './shared/const';
 
 import Split from 'split-grid';
@@ -209,21 +210,33 @@ export async function renderHtmlPreview() {
     return;
   }
 
+  // While WYSIWYG is active, the user is scrolling/editing the preview pane
+  // directly — the raw editor pane isn't being touched and its stale scroll
+  // position shouldn't be used to reposition the preview after each render.
+  // Preserve the preview's own scroll offset across the innerHTML replace instead.
+  const wysiwygScrollTop = isWysiwyg() ? previewPane.scrollTop : undefined;
+
   const html = replaceImageURLs(await getRenderedHtml());
   previewPane.innerHTML = html;
   postRenderHook?.();
   invalidateBlockCache();
   requestAnimationFrame(() => {
     warmBlockCache(previewPane);
-    syncScrollProgress(getEditPane(), previewPane, false);
+    if (wysiwygScrollTop !== undefined) {
+      previewPane.scrollTop = wysiwygScrollTop;
+    } else {
+      syncScrollProgress(getEditPane(), previewPane, false);
+    }
   });
 
   handlePostRender(() => {
-    syncScrollProgress(
-      getEditPane(),
-      getPreviewPane(),
-      false,
-    );
+    if (wysiwygScrollTop === undefined) {
+      syncScrollProgress(
+        getEditPane(),
+        getPreviewPane(),
+        false,
+      );
+    }
 
     const pageZoom = localStorage.getItem(CacheKeys.previewPageZoomKey);
     if (pageZoom !== null) {
