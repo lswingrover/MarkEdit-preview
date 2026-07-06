@@ -56,7 +56,11 @@ export function enableWysiwyg(): void {
   const pr = parseFloat(cs.paddingRight) || 0;
   const toolbar = preview.querySelector<HTMLElement>('.wysiwyg-toolbar');
   if (toolbar !== null) {
-    toolbar.style.top = '0px';
+    // Stick flush with the top of the visible pane. The scroll container's
+    // padding-top offsets the sticky reference downward, so top:0 would leave
+    // a padding-sized gap above the toolbar (scrolled text showing through).
+    // Pulling top up by the padding cancels that so the toolbar sits at y=0.
+    toolbar.style.top = `-${pt}px`;
     toolbar.style.marginTop = `-${pt}px`;
     toolbar.style.marginLeft = `-${pl}px`;
     toolbar.style.marginRight = `-${pr}px`;
