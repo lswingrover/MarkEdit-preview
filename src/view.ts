@@ -189,6 +189,11 @@ export function setWysiwygEditLock(locked: boolean): void {
   states.wysiwygEditLock = locked;
 }
 
+/** Read by scroll.ts to suppress editor→preview sync only during the WYSIWYG edit lock. */
+export function isWysiwygEditLocked(): boolean {
+  return states.wysiwygEditLock;
+}
+
 /** Registered by wysiwyg.ts to re-inject the toolbar after innerHTML replacement. */
 let postRenderHook: (() => void) | undefined;
 export function setPostRenderHook(fn: (() => void) | undefined): void {

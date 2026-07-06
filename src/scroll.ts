@@ -1,7 +1,7 @@
 import { MarkEdit } from 'markedit-api';
 import { getBlockRange, getElementTop, scrollToElement, scrollToPosition } from './shared/utils';
 import { syncScroll } from './support/settings';
-import { isWysiwyg } from './wysiwyg';
+import { isWysiwygEditLocked } from './view';
 
 // ── BlockEntry index ──────────────────────────────────────────────────────────
 // Built once after each render; avoids per-frame querySelectorAll and parseInt.
@@ -73,7 +73,10 @@ export function startObserving(editorPane: HTMLElement, previewPane: HTMLElement
 
   editorPane.addEventListener('scroll', () => {
     if (scrollSource === 'preview') { return; }
-    if (isWysiwyg()) { return; }
+    // Suppress only during the transient post-edit lock (WYSIWYG input just
+    // rewrote the source), not for the whole time WYSIWYG happens to be on —
+    // otherwise side-by-side editor scroll never syncs to preview at all.
+    if (isWysiwygEditLocked()) { return; }
     if (editorRaf !== undefined) { cancelAnimationFrame(editorRaf); }
     editorRaf = requestAnimationFrame(() => {
       setScrollSource('editor');
