@@ -11,12 +11,24 @@
   position: sticky;
   top: -25px; /* compensate for parent padding */
   z-index: 999;
+  user-select: none;
+  flex-wrap: wrap;
+}
+
+/* The blur/background live on a ::before instead of directly on the sticky
+ * element: WebKit has a long-standing bug where position: sticky silently
+ * stops sticking on an element that also has backdrop-filter/filter applied
+ * to it directly. Painting the backdrop on a plain (non-sticky) pseudo-element
+ * behind the content avoids triggering it. */
+.wysiwyg-toolbar::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: -1;
   background: var(--toolbar-bg, rgba(246, 246, 246, 0.94));
   backdrop-filter: blur(12px);
   -webkit-backdrop-filter: blur(12px);
   border-bottom: 1px solid var(--toolbar-border, rgba(0,0,0,0.1));
-  user-select: none;
-  flex-wrap: wrap;
 }
 
 .wysiwyg-btn {
