@@ -1,3 +1,4 @@
+// @vitest-environment happy-dom
 import { describe, it, expect, vi } from 'vitest';
 import { renderMarkdown } from '../src/render';
 import { resolveTaskToggle } from '../src/features/task';
