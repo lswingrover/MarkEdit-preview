@@ -48,20 +48,22 @@ export function enableWysiwyg(): void {
   injectToolbar(preview);
   setPostRenderHook(() => injectToolbar(getPreviewPane()));
 
-  // Dynamically offset the toolbar to match the pane's actual computed padding,
-  // instead of relying on the hardcoded -25px in toolbar.css.
+  // Drop the pane's top padding while WYSIWYG is active. A position:sticky
+  // element is clamped to its containing block — the pane's *content* box, which
+  // sits inside the padding. So while the pane keeps a top padding, the toolbar
+  // physically cannot rise into it: at scrollTop 0 it gets clamped back down by
+  // exactly the padding, leaving a gap (and text bleeding through above it). No
+  // top/margin value beats that clamp. Removing padding-top lets the content box
+  // reach the pane's very top, so the toolbar stays flush at every scroll offset.
+  // Horizontal padding is preserved; negative side margins keep it full-bleed.
   const cs = getComputedStyle(preview);
-  const pt = parseFloat(cs.paddingTop) || 0;
   const pl = parseFloat(cs.paddingLeft) || 0;
   const pr = parseFloat(cs.paddingRight) || 0;
+  preview.style.paddingTop = '0px';
   const toolbar = preview.querySelector<HTMLElement>('.wysiwyg-toolbar');
   if (toolbar !== null) {
-    // Stick flush with the top of the visible pane. The scroll container's
-    // padding-top offsets the sticky reference downward, so top:0 would leave
-    // a padding-sized gap above the toolbar (scrolled text showing through).
-    // Pulling top up by the padding cancels that so the toolbar sits at y=0.
-    toolbar.style.top = `-${pt}px`;
-    toolbar.style.marginTop = `-${pt}px`;
+    toolbar.style.top = '0px';
+    toolbar.style.marginTop = '0px';
     toolbar.style.marginLeft = `-${pl}px`;
     toolbar.style.marginRight = `-${pr}px`;
   }
@@ -81,6 +83,7 @@ export function disableWysiwyg(): void {
   const preview = getPreviewPane();
   preview.contentEditable = 'false';
   preview.classList.remove('wysiwyg-active');
+  preview.style.paddingTop = ''; // restore the top padding removed for the toolbar
   preview.removeEventListener('input', onPreviewInput);
   removeToolbar(preview);
   setPostRenderHook(undefined);
