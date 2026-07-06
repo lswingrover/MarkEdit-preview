@@ -31,6 +31,23 @@ export function interceptPinchZoom(getMode: () => Mode, previewPane: HTMLElement
     const inner = previewPane.querySelector<HTMLElement>('.quicklook-content');
     return inner !== null ? { scroller: previewPane, inner } : null;
   };
+
+  // The toolbar-clearance margin lives on the zoomed element, so `zoom` scales it.
+  // Track the live zoom in `--quicklook-zoom` so the margin can divide it back out (see CSS).
+  for (const event of ['gesturechange', 'gestureend'] as const) {
+    document.addEventListener(event, () => {
+      if (getMode() !== 'preview') {
+        return;
+      }
+
+      const inner = previewPane.querySelector<HTMLElement>('.quicklook-content');
+      if (inner?.style.zoom.length) {
+        inner?.style.setProperty('--quicklook-zoom', inner.style.zoom);
+      } else {
+        inner?.style.removeProperty('--quicklook-zoom');
+      }
+    }, { passive: false });
+  }
 }
 
 /**
@@ -149,6 +166,37 @@ export function trackToolbarSeparator(getMode: () => Mode, previewPane: HTMLElem
   previewPane.addEventListener('scroll', update, { passive: true });
   sourcePane?.addEventListener('scroll', update, { passive: true });
   return update;
+}
+
+/**
+ * Make cmd-c copy the preview pane instead of the focused source editor.
+ * Capture-phase `copy` beats CodeMirror's handler regardless of focus.
+ */
+export function interceptPreviewCopy(previewPane: HTMLElement) {
+  document.addEventListener('copy', event => {
+    if (!previewPane.classList.contains('overlay')) {
+      return;
+    }
+
+    const selection = getSelection();
+    const range = selection !== null && selection.rangeCount > 0 ? selection.getRangeAt(0) : null;
+    const previewRange = range !== null && !range.collapsed && previewPane.contains(range.commonAncestorContainer) ? range : null;
+
+    const fragment = previewRange ?? (() => {
+      const fullRange = document.createRange();
+      fullRange.selectNodeContents(previewPane);
+      return fullRange;
+    })();
+
+    const container = document.createElement('div');
+    container.appendChild(fragment.cloneContents());
+
+    event.clipboardData?.setData('text/html', container.innerHTML);
+    event.clipboardData?.setData('text/plain', previewRange !== null ? previewRange.toString() : previewPane.innerText);
+
+    event.preventDefault();
+    event.stopPropagation();
+  }, true);
 }
 
 function convertToLocal(previewPane: HTMLElement, viewportY: number) {

@@ -9,8 +9,27 @@ body {
 
 .quicklook .markdown-body.overlay > .quicklook-content {
   display: flow-root;
-  zoom: 0.9;
-  min-height: calc(100% + 1px);
+  --quicklook-default-zoom: 0.9;
+  zoom: var(--quicklook-default-zoom);
+
+  /* Toolbar clearance minus the inset, normalized so it stays constant under pinch-zoom */
+  --quicklook-toolbar-inset: 8px;
+  --quicklook-toolbar-clearance: calc((var(--editor-inset-top) - var(--quicklook-toolbar-inset)) * var(--quicklook-default-zoom) / var(--quicklook-zoom, var(--quicklook-default-zoom)));
+  /* Scroll content under the toolbar; scroller stays inset so its scrollbar is clear */
+  margin-top: calc(-1 * var(--quicklook-toolbar-clearance)) !important;
+  /* Add the clearance back so the bounce stays in the pane, not the page */
+  min-height: calc(100% + var(--quicklook-toolbar-clearance) + 1px);
+}
+
+/* Tighten heading spacing for the limited Quick Look viewport */
+.quicklook .markdown-body h1,
+.quicklook .markdown-body h2,
+.quicklook .markdown-body h3,
+.quicklook .markdown-body h4,
+.quicklook .markdown-body h5,
+.quicklook .markdown-body h6 {
+  margin-top: var(--base-size-16, 1rem);
+  margin-bottom: var(--base-size-8, 0.5rem);
 }
 
 /* Links are not interactive in quicklook */
@@ -70,7 +89,6 @@ body {
   font-weight: 500;
   padding: 2px 16px;
   border-radius: 4px;
-  cursor: pointer;
   user-select: none;
   -webkit-user-select: none;
   min-width: 64px;
@@ -86,6 +104,16 @@ body {
   box-shadow: 0 1px 2px rgba(0, 0, 0, 0.12);
 }
 
+.quicklook-segment-icon {
+  display: none;
+}
+
+.quicklook-segment-icon svg {
+  display: block;
+  width: 13px;
+  height: 13px;
+}
+
 /* Compact layout: hide the toolbar and show floating buttons */
 @media (max-width: 580px) {
   body {
@@ -98,13 +126,14 @@ body {
   }
 
   .quicklook .markdown-body.overlay > .quicklook-content {
-    zoom: 0.8;
+    --quicklook-default-zoom: 0.8;
+    --quicklook-toolbar-inset: 0px;
   }
 
   .quicklook-toolbar {
-    top: 6px;
+    top: 8px;
+    right: 16px;
     left: auto;
-    right: 8px;
     height: auto;
     background: transparent !important;
     border-bottom: none !important;
@@ -135,7 +164,7 @@ body {
   .quicklook-segmented {
     pointer-events: auto;
     padding: 0;
-    gap: 2px;
+    gap: 0;
     overflow: hidden;
     background: rgba(242, 242, 245, 0.85);
     backdrop-filter: saturate(180%) blur(12px);
@@ -145,14 +174,25 @@ body {
   }
 
   .quicklook-segment {
-    font-size: 11px;
-    padding: 2px 4px;
+    padding: 2px 3px;
     min-width: 0;
-    border-radius: 4px;
+  }
+
+  .quicklook-segment:hover:not(.active) {
+    background: transparent;
   }
 
   .quicklook-segment.active {
     box-shadow: 0 0 3px rgba(0, 0, 0, 0.3);
+  }
+
+  .quicklook-segment-label {
+    display: none;
+  }
+
+  .quicklook-segment-icon {
+    display: flex;
+    padding: 1px 2px;
   }
 }
 
@@ -190,6 +230,10 @@ body {
     background: rgba(40, 40, 42, 0.85);
     box-shadow: 0 1px 3px rgba(0, 0, 0, 0.35);
     border-color: rgba(128, 128, 128, 0.15);
+  }
+
+  .quicklook-segment:hover:not(.active) {
+    background: transparent;
   }
 
   .quicklook-segment.active {

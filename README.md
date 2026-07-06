@@ -74,7 +74,13 @@ osascript -e 'quit app "MarkEdit"' -e 'delay 1' -e 'launch app "MarkEdit"'
 
 > **Note:** `LITE_BUILD=true` skips KaTeX and Mermaid due to a broken `markedit-katex` package install (`src/index.ts` missing). The lite build includes all core markdown features plus scroll sync and WYSIWYG. If you need math rendering, fix the `markedit-katex` dependency and run `yarn vite build` without the env var.
 
-The version is pinned at `1.8.2` (upstream is `1.8.0`) to prevent MarkEdit's built-in auto-updater from overwriting the fork with the upstream build.
+The version is pinned ahead of upstream to prevent MarkEdit's built-in auto-updater from overwriting the fork with the upstream build.
+
+> [!TIP]
+>
+> In MarkEdit 1.33.0 or later, this extension also provides preview support in [Quick Look](https://github.com/MarkEdit-app/MarkEdit/wiki/Manual#quick-look-extension).
+>
+> To add menu items to the toolbar, see MarkEdit [Customization](https://github.com/MarkEdit-app/MarkEdit/wiki/Customization#editorcustomtoolbaritems) wiki.
 
 ---
 
