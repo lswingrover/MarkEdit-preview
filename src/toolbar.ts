@@ -18,6 +18,13 @@ export function createToolbar(): HTMLElement {
   toolbarEl.setAttribute('role', 'toolbar');
   toolbarEl.setAttribute('aria-label', 'Formatting toolbar');
 
+  // A real element, not a ::before — WKWebView has been unreliable about
+  // compositing backdrop-filter on pseudo-elements behind a sticky ancestor.
+  const backdrop = document.createElement('div');
+  backdrop.className = 'wysiwyg-toolbar-backdrop';
+  backdrop.setAttribute('aria-hidden', 'true');
+  toolbarEl.appendChild(backdrop);
+
   const buttons: ToolbarButton[] = [
     { label: 'H1', title: 'Heading 1', action: () => fmt('h1') },
     { label: 'H2', title: 'Heading 2', action: () => fmt('h2') },
