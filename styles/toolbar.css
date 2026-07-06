@@ -19,12 +19,14 @@
  * on the sticky toolbar: WebKit has a long-standing bug where position: sticky
  * silently stops sticking on an element that also has backdrop-filter/filter
  * applied to it directly, and WKWebView has also been unreliable about
- * compositing backdrop-filter on a ::before behind a sticky ancestor. A plain
- * absolutely-positioned element, painted first (so later siblings sit on top
- * in normal DOM order — no z-index needed), avoids both. */
+ * compositing backdrop-filter on a ::before behind a sticky ancestor. z-index
+ * -1 is required, not just DOM order: a positioned descendant (this one) always
+ * paints above non-positioned in-flow siblings (the buttons) regardless of
+ * source order, unless it's placed at a lower stacking level explicitly. */
 .wysiwyg-toolbar-backdrop {
   position: absolute;
   inset: 0;
+  z-index: -1;
   background: var(--toolbar-bg, rgba(246, 246, 246, 0.94));
   backdrop-filter: blur(12px);
   -webkit-backdrop-filter: blur(12px);
