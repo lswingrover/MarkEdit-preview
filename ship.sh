@@ -46,13 +46,21 @@ else
   yarn build:lite
 fi
 
-  # Sync built JS to both script locations MarkEdit may load from
+  # Sync built JS to both script locations MarkEdit may load from.
+  # yarn build writes dist/markedit-preview.js; yarn build:lite writes
+  # dist/lite/markedit-preview.js — pick the path matching what was just built,
+  # otherwise a lite build gets clobbered by a stale full-build artifact.
+  if $FULL_BUILD; then
+    BUILT_JS="dist/markedit-preview.js"
+  else
+    BUILT_JS="dist/lite/markedit-preview.js"
+  fi
   SHARED="$HOME/Library/Group Containers/group.app.cyan.markedit/Shared/scripts"
   PRIVATE="$HOME/Library/Containers/app.cyan.markedit/Data/Documents/scripts"
   mkdir -p "$SHARED"
-  cp dist/markedit-preview.js "$SHARED/markedit-preview.js"
+  cp "$BUILT_JS" "$SHARED/markedit-preview.js"
   if [ -d "$PRIVATE" ]; then
-    cp dist/markedit-preview.js "$PRIVATE/markedit-preview.js"
+    cp "$BUILT_JS" "$PRIVATE/markedit-preview.js"
   fi
 
 echo "?  Build complete — deployed to MarkEdit scripts folder"
