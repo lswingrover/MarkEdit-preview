@@ -142,6 +142,8 @@ git merge upstream/main
 
 The scroll and WYSIWYG changes are isolated to the four files above and are unlikely to conflict with most upstream changes.
 
+**History note — the abandoned `markedit-wysiwyg` standalone repo:** on 2026-06-02, the scroll engine and WYSIWYG editing already living in this fork (`src/scroll.ts`, `src/wysiwyg.ts`, both dating to 2026-05-31) were ported into a separate repo, [lswingrover/markedit-wysiwyg](https://github.com/lswingrover/markedit-wysiwyg), as an experiment to see whether the same features could work as an externally-injected companion script instead of requiring a fork. That experiment was abandoned the same day and the repo archived — this fork's native implementation continued as the only maintained one (fixes as late as 2026-07-06). **Do not deploy `markedit-wysiwyg.js` alongside this extension** — it duplicates the same toolbar/contentEditable/scroll-sync behavior and the two will fight over the same preview pane. If WYSIWYG or scroll-sync behavior needs changing, edit `src/wysiwyg.ts` / `src/scroll.ts` here, not the archived companion repo.
+
 ---
 
 ## Requirements
