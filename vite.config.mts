@@ -38,6 +38,13 @@ export default defineConfig(mergeConfig(defaultViteConfig({ outDir, destDir: 'Li
     __FULL_BUILD__: JSON.stringify(!liteBuild),
   },
   build: {
+    // dist/lite/ nests inside dist/ (upstream's own layout) — Vite's default
+    // emptyOutDir wipes the WHOLE outDir tree before writing, so a full build
+    // (outDir: 'dist') silently deletes the lite build's tracked output, and
+    // vice versa if the lite outDir were ever a parent. Both dist artifacts
+    // are single fixed-name files that get overwritten in place each build,
+    // so there's no staleness risk in leaving old output around to disable this for.
+    emptyOutDir: false,
     rollupOptions: {
       output: {
         banner: requireShim,

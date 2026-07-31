@@ -14,9 +14,10 @@ import TurndownService from 'turndown';
 // @ts-expect-error no bundled types; @types/turndown covers TurndownService only
 import { gfm } from 'turndown-plugin-gfm';
 import { MarkEdit } from 'markedit-api';
-import { getPreviewPane, setWysiwygEditLock, setPostRenderHook, renderHtmlPreview } from './view';
+import { getPreviewPane, setWysiwygEditLock, renderHtmlPreview } from './view';
 import { invalidateBlockCache } from './scroll';
-import { createToolbar, removeToolbar } from './toolbar';
+import { installPreviewShortcuts, removePreviewShortcuts } from './toolbar';
+import { showUnifiedToolbar, hideUnifiedToolbar } from './unifiedToolbar';
 
 // Turndown instance configured for GFM-compliant markdown output
 const turndown = new TurndownService({
@@ -29,6 +30,20 @@ const turndown = new TurndownService({
   linkStyle: 'inlined',
 });
 turndown.use(gfm);
+
+/**
+ * Turndown escapes markdown-special characters in ordinary text (so a user
+ * literally typing "[x]" doesn't accidentally produce a link/footnote). That
+ * breaks the footnote/alert actions, which deliberately insert real "[^1]" /
+ * "[!NOTE]" syntax as plain text — Turndown turned it into "\[^1\]", which
+ * isn't a footnote anymore and also broke next-number detection downstream.
+ * Any element tagged with the `raw-markdown` class is emitted verbatim
+ * instead. See insertFootnote()/insertAlert() in toolbar.ts.
+ */
+turndown.addRule('rawMarkdown', {
+  filter: node => node.nodeName === 'SPAN' && node.classList.contains('raw-markdown'),
+  replacement: (_content, node) => node.textContent ?? '',
+});
 
 let isWysiwygActive = false;
 let editLockTimer: ReturnType<typeof setTimeout> | undefined;
@@ -45,30 +60,9 @@ export function enableWysiwyg(): void {
   preview.spellcheck = true;
   preview.classList.add('wysiwyg-active');
   preview.addEventListener('input', onPreviewInput);
-  injectToolbar(preview);
-  setPostRenderHook(() => injectToolbar(getPreviewPane()));
-
-  // Drop the pane's top padding while WYSIWYG is active. A position:sticky
-  // element is clamped to its containing block — the pane's *content* box, which
-  // sits inside the padding. So while the pane keeps a top padding, the toolbar
-  // physically cannot rise into it: at scrollTop 0 it gets clamped back down by
-  // exactly the padding, leaving a gap (and text bleeding through above it). No
-  // top/margin value beats that clamp. Removing padding-top lets the content box
-  // reach the pane's very top, so the toolbar stays flush at every scroll offset.
-  // Horizontal padding is preserved; negative side margins keep it full-bleed.
-  const cs = getComputedStyle(preview);
-  const pl = parseFloat(cs.paddingLeft) || 0;
-  const pr = parseFloat(cs.paddingRight) || 0;
-  preview.style.paddingTop = '0px';
-  const toolbar = preview.querySelector<HTMLElement>('.wysiwyg-toolbar');
-  if (toolbar !== null) {
-    toolbar.style.top = '0px';
-    toolbar.style.marginTop = '0px';
-    toolbar.style.marginLeft = `-${pl}px`;
-    toolbar.style.marginRight = `-${pr}px`;
-  }
-
-  invalidateBlockCache(); // toolbar shifts block offsetTops
+  installPreviewShortcuts(preview);
+  showUnifiedToolbar();
+  invalidateBlockCache(); // the toolbar reserves space at the top, shifting block offsetTops
   preview.focus();
 }
 
@@ -83,19 +77,11 @@ export function disableWysiwyg(): void {
   const preview = getPreviewPane();
   preview.contentEditable = 'false';
   preview.classList.remove('wysiwyg-active');
-  preview.style.paddingTop = ''; // restore the top padding removed for the toolbar
   preview.removeEventListener('input', onPreviewInput);
-  removeToolbar(preview);
-  setPostRenderHook(undefined);
-  invalidateBlockCache(); // toolbar removal restores block offsetTops
+  removePreviewShortcuts(preview);
+  hideUnifiedToolbar();
+  invalidateBlockCache();
   renderHtmlPreview();
-}
-
-/** Re-inject toolbar after renderHtmlPreview() replaces innerHTML. */
-export function injectToolbar(preview: HTMLElement): void {
-  if (preview.querySelector('.wysiwyg-toolbar') !== null) {return;}
-  const toolbar = createToolbar();
-  preview.insertBefore(toolbar, preview.firstChild);
 }
 
 function onPreviewInput(): void {
@@ -111,7 +97,6 @@ function onPreviewInput(): void {
 function htmlToMarkdown(): string {
   const preview = getPreviewPane();
   const clone = preview.cloneNode(true) as HTMLElement;
-  clone.querySelector('.wysiwyg-toolbar')?.remove();
   clone.querySelectorAll('[data-line-from],[data-line-to]').forEach(el => {
     el.removeAttribute('data-line-from');
     el.removeAttribute('data-line-to');

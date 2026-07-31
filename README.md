@@ -41,13 +41,43 @@ The browser shows the macOS print dialog immediately. When you dismiss it (print
 
 ### WYSIWYG editing
 
-The preview pane becomes `contentEditable`. A sticky formatting toolbar floats at the top of the pane.
-
-**Toolbar actions:** H1 / H2 / H3, Bold, Italic, Strikethrough, Inline code, Code block, Blockquote, Unordered list, Ordered list, Link, Horizontal rule
+The preview pane becomes `contentEditable`.
 
 **Sync:** [Turndown](https://github.com/mixmark-io/turndown) (+ GFM plugin) converts HTML → Markdown on each edit. A 600ms edit-lock suppresses `renderHtmlPreview()` after each keystroke so the source update doesn't immediately re-render and destroy the cursor position.
 
 **Default state:** WYSIWYG is enabled on every launch. Toggle via **Extensions → View Mode → WYSIWYG Editing** (checkmark indicates active).
+
+### Unified formatting toolbar + shortcuts
+
+One toolbar spans the full window width, fixed above whichever pane(s) are visible — both panes in side-by-side mode, or the single visible pane in edit-only/preview-only mode — rather than each pane carrying its own embedded toolbar. Buttons, order, labels, and shortcuts are all defined once in `src/shared/formatSpecs.ts`.
+
+**Action routing:** each button click checks which pane currently has focus (`MarkEdit.editorView.hasFocus`) and dispatches to that pane's implementation — Markdown-text CodeMirror transactions (`src/sourceFormat.ts`, via `src/sourceToolbar.ts`) for the source pane, `execCommand`/DOM edits (`src/toolbar.ts`) for the preview pane. Keyboard shortcuts work the same way but can't be unified into one listener, since a keydown event is inherently scoped to whichever element has focus — a CodeMirror `keymap` extension (always active) covers the source pane, a `keydown` listener on the preview pane (active only while WYSIWYG is on) covers the other.
+
+**Toolbar actions:** H1 / H2 / H3, Bold, Italic, Strikethrough, Inline code, Code block, Blockquote, Unordered list, Ordered list, Link, Image, Horizontal rule, Alert/callout, Footnote
+
+**Toggle-aware:** Bold/Italic/Strikethrough/Inline-code and Blockquote/lists remove their own markup if applied again, on both panes. Code block and Alert/callout are not toggles (always insert fresh) — reliable toggle-detection for a construct with its own marker/fence line isn't worth the complexity.
+
+**Shortcuts** (work in whichever pane has focus, same combos on both):
+
+| Action | Shortcut | Action | Shortcut |
+|---|---|---|---|
+| Heading 1/2/3 | ⌘1 / ⌘2 / ⌘3 | Insert link | ⌘K |
+| Bold | ⌘B | Insert image | ⇧⌘K |
+| Italic | ⌘I | Horizontal rule | ⇧⌘− |
+| Strikethrough | ⇧⌘X | Alert / callout | ⌥⌘A |
+| Inline code | ⌘E | Footnote | ⌥⌘F |
+| Code block | ⌥⌘C | Blockquote | ⇧⌘. |
+| Unordered list | ⇧⌘8 | Ordered list | ⇧⌘7 |
+
+**Alert/callout** opens a popover (`src/shared/alertPicker.ts`, built on the reusable `src/shared/pickerPopover.ts`) showing all five [GitHub alert types](https://github.com/orgs/community/discussions/16925) — Note / Tip / Important / Warning / Caution — each as its actual rendered appearance (same `.markdown-alert-*` CSS classes and octicon SVGs `markdown-it-github-alerts` itself produces, not plain text labels), plus a Cancel button. Escape or clicking outside also cancels. Picking one inserts `> [!TYPE]`.
+
+**Footnote** inserts `[^N]` at the cursor (N = next unused number) and appends `[^N]: ` at the end of the document. The cursor stays right after the inserted reference, not the definition — scroll down when you're ready to write it. (Parking the cursor in the definition seemed convenient at first, but meant a second footnote/anything, done without clicking back into the main text first, landed in the footnote zone instead — see the `computeFootnoteTransaction` doc comment.)
+
+Both preview-side alert/footnote actions insert their markdown-syntax markers (`[!TYPE]`, `[^N]`, `[^N]: `) wrapped in a `raw-markdown`-tagged span, with a matching Turndown rule (in `wysiwyg.ts`) that emits them verbatim. Turndown otherwise escapes markdown-special characters in ordinary text by default (so a user literally typing `[x]` doesn't accidentally produce a link) — which previously corrupted our deliberately-inserted syntax into `\[^N\]`, breaking both the footnote and the next-footnote-number detection downstream.
+
+**Space reservation:** the toolbar is `position: fixed` and doesn't push anything down on its own. The source pane reserves space via an empty CodeMirror `showPanel` spacer sized to the toolbar's measured height; the preview pane gets a `padding-top`/`top` CSS override (two variants — one for side-by-side, one for the full-preview overlay) driven by a `--markedit-toolbar-height` CSS variable set from that same measurement. See `src/unifiedToolbar.ts`.
+
+Toggling **Extensions → View Mode → WYSIWYG Editing** shows/hides the toolbar and enables/disables the preview pane's shortcut listener (since the preview pane isn't editable at all with WYSIWYG off). The source pane's keyboard shortcuts stay active regardless of the WYSIWYG toggle — editing raw Markdown doesn't depend on it.
 
 ---
 
@@ -106,12 +136,19 @@ If the merge has conflicts (most likely in `src/scroll.ts` or `main.ts`), resolv
 ```
 MarkEdit.app (native Swift/AppKit)
 └── WKWebView
-    └── markedit-preview.js  ← this fork, loaded from scripts folder
-        ├── main.ts           ← entry: onEditorReady, menu items, update check
-        ├── src/view.ts       ← layout: previewPane div, view modes, render
-        ├── src/scroll.ts     ← BlockEntry index, RAF sync, startObserving()
-        ├── src/wysiwyg.ts    ← contentEditable, Turndown sync, edit lock
-        └── src/toolbar.ts    ← toolbar DOM + formatting commands
+    └── markedit-preview.js            ← this fork, loaded from scripts folder
+        ├── main.ts                    ← entry: onEditorReady, menu items, update check
+        ├── src/view.ts                ← layout: previewPane div, view modes, render
+        ├── src/scroll.ts              ← BlockEntry index, RAF sync, startObserving()
+        ├── src/wysiwyg.ts             ← contentEditable, Turndown sync, edit lock
+        ├── src/unifiedToolbar.ts      ← the one toolbar's DOM + focus-based action routing
+        ├── src/toolbar.ts             ← preview-pane actions (execCommand/DOM) + shortcut listener
+        ├── src/sourceToolbar.ts       ← source-pane actions (CodeMirror transactions) + keymap + spacer panel
+        ├── src/sourceFormat.ts        ← pure Markdown-text transaction logic (unit tested)
+        ├── src/toolbarUI.ts           ← shared button-DOM builder
+        ├── src/shared/formatSpecs.ts  ← single source of truth: buttons, labels, shortcuts
+        ├── src/shared/alertPicker.ts  ← shared alert-type picker (Note/Tip/Important/Warning/Caution)
+        └── src/shared/pickerPopover.ts ← reusable anchored popover: Escape/outside-click/Cancel all resolve undefined
 ```
 
 `startObserving(editorPane, previewPane)` is called in `onEditorReady`. It adds a `scroll` listener (passive) to `MarkEdit.editorView.scrollDOM`. On each scroll event, a RAF callback calls `syncScrollProgress()` which maps the editor's CodeMirror line position to a preview scroll position using the pre-built `BlockEntry` index.
@@ -128,10 +165,18 @@ MarkEdit.app (native Swift/AppKit)
 | `src/view.ts` | `printRendered()` — writes styled HTML dotfile + opens browser to print |
 | `src/shared/strings.ts` | `printRendered` locale strings (EN / zh-Hans / zh-Hant) |
 | `src/scroll.ts` | RAF-based `startObserving()`; `BlockEntry` cache with `warmBlockCache()` / `invalidateBlockCache()` |
-| `src/wysiwyg.ts` | WYSIWYG mode; sticky toolbar fix (`top: 0px`) |
-| `src/toolbar.ts` | Toolbar DOM + CSS (new file); `top: 0` sticky CSS |
-| `package.json` | Version bumped to `1.8.2` |
-| `vite.config.mts` | `markedit-katex` alias for Yarn 1 + Vite 7 compat |
+| `src/wysiwyg.ts` | WYSIWYG mode; wires the unified toolbar's show/hide + preview shortcut listener into the enable/disable lifecycle |
+| `src/unifiedToolbar.ts` | The one toolbar's DOM + focus-based routing between source/preview actions (new file) |
+| `src/toolbar.ts` | Preview-pane actions (execCommand/DOM), no toolbar DOM of its own (new file); preview-pane keyboard shortcut listener |
+| `src/sourceToolbar.ts` | Source-pane actions (CodeMirror transactions), no toolbar DOM of its own; always-on `keymap`; empty `showPanel` spacer sized to the unified toolbar's height (new file) |
+| `src/sourceFormat.ts` | Pure Markdown-text transaction functions for the source pane (new file, unit tested in `tests/sourceFormat.test.ts`) |
+| `src/toolbarUI.ts` | Shared toolbar button DOM builder (new file) |
+| `src/shared/formatSpecs.ts` | Shared button/shortcut spec — single source of truth for the toolbar (new file) |
+| `src/shared/alertPicker.ts` | Shared alert-type picker — renders each type's real appearance via the reused `.markdown-alert-*` classes (new file) |
+| `src/shared/pickerPopover.ts` | Reusable anchored popover: Escape/outside-click/explicit Cancel all resolve `undefined` (new file) |
+| `src/view.ts` (again) | `appendStyle(alertsCss())` — theme-independent alert styling was never applied to the live document at all before this (only to the standalone HTML export path); needed so alerts render correctly under non-`github` preview themes, and so the alert picker's popover preview (outside `.markdown-body`) has any alert styling to pick up |
+| `package.json` | Version bumped to `1.9.0` |
+| `vite.config.mts` | `markedit-katex` alias for Yarn 1 + Vite 7 compat; `emptyOutDir: false` — full/lite builds share `dist/`, and Vite's default cleanup would otherwise wipe one build's tracked output whenever the other mode runs |
 
 **Upstream remote** is wired as `upstream`. Pull updates with:
 
@@ -140,7 +185,7 @@ git fetch upstream
 git merge upstream/main
 ```
 
-The scroll and WYSIWYG changes are isolated to the four files above and are unlikely to conflict with most upstream changes.
+The scroll, WYSIWYG, and toolbar changes are isolated to the files above (all new files, or narrowly-scoped edits to `main.ts`/`wysiwyg.ts`) and are unlikely to conflict with most upstream changes.
 
 **History note — the abandoned `markedit-wysiwyg` standalone repo:** on 2026-06-02, the scroll engine and WYSIWYG editing already living in this fork (`src/scroll.ts`, `src/wysiwyg.ts`, both dating to 2026-05-31) were ported into a separate repo, [lswingrover/markedit-wysiwyg](https://github.com/lswingrover/markedit-wysiwyg), as an experiment to see whether the same features could work as an externally-injected companion script instead of requiring a fork. That experiment was abandoned the same day and the repo archived — this fork's native implementation continued as the only maintained one (fixes as late as 2026-07-06). **Do not deploy `markedit-wysiwyg.js` alongside this extension** — it duplicates the same toolbar/contentEditable/scroll-sync behavior and the two will fight over the same preview pane. If WYSIWYG or scroll-sync behavior needs changing, edit `src/wysiwyg.ts` / `src/scroll.ts` here, not the archived companion repo.
 

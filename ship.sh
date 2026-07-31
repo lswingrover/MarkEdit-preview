@@ -1,11 +1,18 @@
 #!/bin/bash
 # ship.sh — Build and deploy markedit-preview, optionally commit + tag + push
+#
 # Usage:
-#   bash ship.sh                 # build:lite + deploy only
-#   bash ship.sh --full          # full build (lint + build) + deploy
-#   bash ship.sh --push          # build + git commit + tag + push
-#   bash ship.sh --reload        # build + restart MarkEdit after deploy
-#   bash ship.sh --push --reload # all of the above
+#   bash ship.sh                        # build:lite + deploy only, no version change
+#   bash ship.sh --full                 # full build (lint + katex/mermaid) + deploy
+#   bash ship.sh --push                 # + auto patch-bump, git commit + tag + push
+#   bash ship.sh --push --minor         # push with a minor bump instead of patch
+#   bash ship.sh --push --major         # push with a major bump
+#   bash ship.sh --push --version=1.9.1 # push with an explicit version (skips auto-bump)
+#   bash ship.sh --reload               # restart MarkEdit after deploy
+#   bash ship.sh --push --reload        # all of the above
+#
+# Version is only ever touched on a --push run — a plain build:deploy for
+# local testing never rewrites package.json.
 
 set -euo pipefail
 
@@ -21,22 +28,79 @@ cd "$SCRIPT_DIR"
 
 export PATH=/opt/homebrew/bin:/usr/local/bin:$PATH
 
-VERSION=$(node -p "require('./package.json').version")
 FULL_BUILD=false
 DO_PUSH=false
 DO_RELOAD=false
+BUMP_KIND="patch"
+EXPLICIT_VERSION=""
 
 for arg in "$@"; do
   case "$arg" in
-    --full)   FULL_BUILD=true ;;
-    --push)   DO_PUSH=true ;;
-    --reload) DO_RELOAD=true ;;
+    --full)       FULL_BUILD=true ;;
+    --push)       DO_PUSH=true ;;
+    --reload)     DO_RELOAD=true ;;
+    --minor)      BUMP_KIND="minor" ;;
+    --major)      BUMP_KIND="major" ;;
+    --version=*)  EXPLICIT_VERSION="${arg#--version=}" ;;
   esac
 done
 
-# ?? 1. Build ????????????????????????????????????????????????????????????????
+# ── 0. Branch guard ────────────────────────────────────────────────────────────
+# Mirrors the wolfgar-chat ship convention: only bump/push from a clean main.
+# A --push from elsewhere still commits + tags + pushes current HEAD (useful for
+# a hotfix branch), it just never touches the version number.
+CURRENT_BRANCH=$(git rev-parse --abbrev-ref HEAD)
+ON_MAIN=false
+if [ "$CURRENT_BRANCH" = "main" ]; then
+  ON_MAIN=true
+fi
+if $DO_PUSH && ! $ON_MAIN; then
+  echo "⚠️  On branch '${CURRENT_BRANCH}', not main — shipping current HEAD as-is, no version bump."
+fi
+
+# ── 1. Version ─────────────────────────────────────────────────────────────────
+CURRENT_VERSION=$(node -p "require('./package.json').version")
+
+if [ -n "$EXPLICIT_VERSION" ]; then
+  VERSION="$EXPLICIT_VERSION"
+  node -e "
+    const fs = require('fs');
+    const p = JSON.parse(fs.readFileSync('package.json', 'utf8'));
+    p.version = '${VERSION}';
+    fs.writeFileSync('package.json', JSON.stringify(p, null, 2) + '\n');
+  "
+elif $DO_PUSH && $ON_MAIN; then
+  VERSION=$(node -e "
+    const fs = require('fs');
+    const p = JSON.parse(fs.readFileSync('package.json', 'utf8'));
+    const [ma, mi, pa] = p.version.split('.').map(Number);
+    let next;
+    if ('${BUMP_KIND}' === 'major') { next = (ma + 1) + '.0.0'; }
+    else if ('${BUMP_KIND}' === 'minor') { next = ma + '.' + (mi + 1) + '.0'; }
+    else { next = ma + '.' + mi + '.' + (pa + 1); }
+    p.version = next;
+    fs.writeFileSync('package.json', JSON.stringify(p, null, 2) + '\n');
+    console.log(next);
+  ")
+else
+  VERSION="$CURRENT_VERSION"
+fi
+
+# ── 2. Build ───────────────────────────────────────────────────────────────────
 echo ""
-echo "? Building markedit-preview v${VERSION}..."
+echo "🚀 Building markedit-preview v${VERSION}..."
+
+if $FULL_BUILD; then
+  BUILT_JS="dist/markedit-preview.js"
+else
+  BUILT_JS="dist/lite/markedit-preview.js"
+fi
+
+# Captured before the build so the freshness check below can't pass on a stale
+# leftover from a previous run — this is exactly the bug class that bit this
+# repo twice: a lite ship silently deploying a stale full-build artifact, and
+# Vite's emptyOutDir wiping one mode's output when the other mode built.
+PRE_BUILD_EPOCH=$(date +%s)
 
 if $FULL_BUILD; then
   echo "  (full build with lint)"
@@ -46,43 +110,82 @@ else
   yarn build:lite
 fi
 
-  # Sync built JS to both script locations MarkEdit may load from.
-  # yarn build writes dist/markedit-preview.js; yarn build:lite writes
-  # dist/lite/markedit-preview.js — pick the path matching what was just built,
-  # otherwise a lite build gets clobbered by a stale full-build artifact.
-  if $FULL_BUILD; then
-    BUILT_JS="dist/markedit-preview.js"
-  else
-    BUILT_JS="dist/lite/markedit-preview.js"
-  fi
-  SHARED="$HOME/Library/Group Containers/group.app.cyan.markedit/Shared/scripts"
-  PRIVATE="$HOME/Library/Containers/app.cyan.markedit/Data/Documents/scripts"
-  mkdir -p "$SHARED"
-  cp "$BUILT_JS" "$SHARED/markedit-preview.js"
-  if [ -d "$PRIVATE" ]; then
-    cp "$BUILT_JS" "$PRIVATE/markedit-preview.js"
-  fi
+# ── 3. Verify the build actually produced fresh output ────────────────────────
+if [ ! -f "$BUILT_JS" ]; then
+  echo "❌ VERIFY FAILED: ${BUILT_JS} does not exist after build."
+  exit 1
+fi
+BUILT_JS_EPOCH=$(date -r "$BUILT_JS" +%s)
+if [ "$BUILT_JS_EPOCH" -lt "$PRE_BUILD_EPOCH" ]; then
+  echo "❌ VERIFY FAILED: ${BUILT_JS} has a stale mtime — this build did not regenerate it. Refusing to deploy stale content."
+  exit 1
+fi
 
-echo "?  Build complete — deployed to MarkEdit scripts folder"
+# Sibling-artifact sentinel: the OTHER build mode's output should still exist
+# too (Vite's default emptyOutDir wipes it otherwise — see vite.config.mts's
+# emptyOutDir:false comment). Soft warning, not fatal: a fresh clone that's
+# never run the other mode legitimately won't have it yet.
+if $FULL_BUILD; then
+  SIBLING_JS="dist/lite/markedit-preview.js"
+else
+  SIBLING_JS="dist/markedit-preview.js"
+fi
+if [ ! -f "$SIBLING_JS" ]; then
+  echo "⚠️  ${SIBLING_JS} is missing — if it existed before this build, Vite's emptyOutDir may have regressed (check vite.config.mts)."
+fi
 
-# ?? 2. Git commit + tag + push ???????????????????????????????????????????????
+# ── 4. Deploy ──────────────────────────────────────────────────────────────────
+SHARED="$HOME/Library/Group Containers/group.app.cyan.markedit/Shared/scripts"
+PRIVATE="$HOME/Library/Containers/app.cyan.markedit/Data/Documents/scripts"
+mkdir -p "$SHARED"
+cp "$BUILT_JS" "$SHARED/markedit-preview.js"
+if [ -d "$PRIVATE" ]; then
+  cp "$BUILT_JS" "$PRIVATE/markedit-preview.js"
+fi
+
+if ! cmp -s "$BUILT_JS" "$SHARED/markedit-preview.js"; then
+  echo "❌ VERIFY FAILED: deployed Shared script does not byte-match ${BUILT_JS}."
+  exit 1
+fi
+if [ -d "$PRIVATE" ] && ! cmp -s "$BUILT_JS" "$PRIVATE/markedit-preview.js"; then
+  echo "❌ VERIFY FAILED: deployed Private script does not byte-match ${BUILT_JS}."
+  exit 1
+fi
+
+echo "✅ Verified: deployed script matches ${BUILT_JS} (built fresh this run)"
+echo "✅  Build complete — deployed to MarkEdit scripts folder"
+
+# ── 5. Changelog ───────────────────────────────────────────────────────────────
+# Must run before `git tag` below — the shared helper looks up the most
+# recent existing tag to know what's new, and would just find this ship's
+# own tag if called after it. Prefers a hand-written ## [X.Y.Z] entry if one
+# already exists; otherwise auto-generates one from commit subjects since
+# the last tag. Never blocks the ship either way.
 if $DO_PUSH; then
   echo ""
-  echo "? Committing and pushing v${VERSION}..."
+  echo "📝 Changelog..."
+  CHANGELOG_NOTES=$(python3 ~/Developer/scotty/scripts/changelog.py --repo . --version "$VERSION")
+  echo "$CHANGELOG_NOTES" | sed 's/^/  /'
+fi
+
+# ── 6. Git commit + tag + push ─────────────────────────────────────────────────
+if $DO_PUSH; then
+  echo ""
+  echo "📦 Committing and pushing v${VERSION}..."
   git add -A
   git commit -m "ship markedit-preview v${VERSION}" 2>/dev/null || echo "  (nothing to commit)"
   git tag -f "v${VERSION}" 2>/dev/null || true
   git push 2>/dev/null || echo "  (no remote configured)"
   git push --tags --force 2>/dev/null || echo "  (tags: no remote)"
-  echo "?  Pushed v${VERSION}"
+  echo "✅  Pushed v${VERSION}"
 fi
 
-# ?? 3. Reload MarkEdit ????????????????????????????????????????????????????????
+# ── 7. Reload MarkEdit ──────────────────────────────────────────────────────────
 if $DO_RELOAD; then
   echo ""
-  echo "? Reloading MarkEdit..."
+  echo "🔄 Reloading MarkEdit..."
   yarn reload 2>/dev/null || osascript -e 'quit app "MarkEdit"' -e 'delay 1' -e 'launch app "MarkEdit"'
-  echo "?  MarkEdit reloaded"
+  echo "✅  MarkEdit reloaded"
 fi
 
 echo ""

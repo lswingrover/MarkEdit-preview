@@ -1,0 +1,76 @@
+/* ── Picker popovers ──────────────────────────────────────────────────────────
+   Shared chrome for anchored picker popovers (src/shared/pickerPopover.ts) —
+   currently the alert-type picker, and the upcoming table-size picker. */
+
+.formatting-picker-popover {
+  z-index: 10002; /* above .unified-toolbar's 10001 */
+  background: var(--toolbar-bg, rgba(246, 246, 246, 0.97));
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid var(--toolbar-border, rgba(0,0,0,0.1));
+  border-radius: 8px;
+  box-shadow: 0 4px 16px rgba(0,0,0,0.18);
+  padding: 6px;
+  min-width: 200px;
+}
+
+/* ── Alert-type picker ────────────────────────────────────────────────────── */
+
+.alert-picker-option {
+  display: block;
+  width: 100%;
+  border: none;
+  background: transparent;
+  padding: 3px;
+  border-radius: 6px;
+  cursor: pointer;
+  text-align: left;
+}
+
+.alert-picker-option:hover,
+.alert-picker-option:focus-visible {
+  background: var(--toolbar-hover, rgba(0,0,0,0.08));
+}
+
+/* Scaled down for a compact list, but otherwise the real rendered markup —
+ * same classes, same colors, same icons as the alert once it's inserted. */
+.alert-picker-preview {
+  margin-bottom: 0;
+  padding: 0.35rem 0.6rem;
+  pointer-events: none;
+}
+
+.alert-picker-preview .markdown-alert-title {
+  font-size: 13px;
+}
+
+.alert-picker-cancel {
+  display: block;
+  width: 100%;
+  border: none;
+  background: transparent;
+  margin-top: 4px;
+  padding: 6px;
+  border-radius: 6px;
+  border-top: 1px solid var(--toolbar-border, rgba(0,0,0,0.1));
+  color: var(--toolbar-fg, #333);
+  font-size: 12px;
+  font-family: -apple-system, BlinkMacSystemFont, sans-serif;
+  cursor: pointer;
+  text-align: center;
+}
+
+.alert-picker-cancel:hover,
+.alert-picker-cancel:focus-visible {
+  background: var(--toolbar-hover, rgba(0,0,0,0.08));
+}
+
+/* Dark mode — reuses the toolbar's own variables where they overlap. */
+@media (prefers-color-scheme: dark) {
+  .formatting-picker-popover {
+    --toolbar-bg: rgba(36, 36, 36, 0.97);
+    --toolbar-border: rgba(255,255,255,0.12);
+    --toolbar-fg: #ddd;
+    --toolbar-hover: rgba(255,255,255,0.1);
+  }
+}

@@ -1,32 +1,22 @@
-/* ── WYSIWYG Formatting Toolbar ─────────────────────────────────────────────
-   Positioned sticky at the top of .markdown-body so it stays in view as
-   the user scrolls. Only rendered when WYSIWYG mode is active.           */
+/* ── Unified Formatting Toolbar ──────────────────────────────────────────────
+   One toolbar spans the full window width, fixed above whichever pane(s) are
+   visible — both in side-by-side mode, or the single visible pane in
+   edit-only/preview-only mode. Each button routes to the source pane
+   (CodeMirror) or preview pane (contentEditable) based on current focus; see
+   unifiedToolbar.ts. Only rendered when WYSIWYG mode is active. */
 
-.wysiwyg-toolbar {
+.unified-toolbar {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
   display: flex;
   align-items: center;
   gap: 2px;
   padding: 6px 10px;
-  margin: -25px -25px 20px -25px; /* bleed to edges of markdown-body padding */
-  position: sticky;
-  top: -25px; /* compensate for parent padding */
-  z-index: 999;
+  z-index: 10001; /* above .markdown-body.overlay's 10000 */
   user-select: none;
   flex-wrap: wrap;
-}
-
-/* The blur/background live on a real first-child element instead of directly
- * on the sticky toolbar: WebKit has a long-standing bug where position: sticky
- * silently stops sticking on an element that also has backdrop-filter/filter
- * applied to it directly, and WKWebView has also been unreliable about
- * compositing backdrop-filter on a ::before behind a sticky ancestor. z-index
- * -1 is required, not just DOM order: a positioned descendant (this one) always
- * paints above non-positioned in-flow siblings (the buttons) regardless of
- * source order, unless it's placed at a lower stacking level explicitly. */
-.wysiwyg-toolbar-backdrop {
-  position: absolute;
-  inset: 0;
-  z-index: -1;
   background: var(--toolbar-bg, rgba(246, 246, 246, 0.94));
   backdrop-filter: blur(12px);
   -webkit-backdrop-filter: blur(12px);
@@ -74,9 +64,28 @@
   outline: none;
 }
 
+/* ── Space reservation ────────────────────────────────────────────────────────
+   The toolbar is position:fixed, so it doesn't push anything down on its own.
+   The source (CodeMirror) side reserves space via a CM6 panel (see
+   sourceToolbar.ts's spacer); the preview side needs these two CSS overrides,
+   one per way the pane can be positioned. --markedit-toolbar-height is set by
+   unifiedToolbar.ts from the toolbar's own measured height. */
+/* .markdown-container is a class on body itself (see view.ts's containerView),
+ * not a descendant div — so this must be one compound selector on body, not
+ * "body.X .markdown-container .Y" (that combinator never matches anything,
+ * since .markdown-container and .markedit-unified-toolbar-active are the same
+ * element). The 25px below must match .markdown-body's base padding in main.css. */
+body.markedit-unified-toolbar-active.markdown-container .markdown-body {
+  padding-top: calc(25px + var(--markedit-toolbar-height, 0px));
+}
+
+body.markedit-unified-toolbar-active .markdown-body.overlay {
+  top: calc(var(--markedit-content-inset, 0px) + var(--markedit-toolbar-height, 0px));
+}
+
 /* Dark mode */
 @media (prefers-color-scheme: dark) {
-  .wysiwyg-toolbar {
+  .unified-toolbar {
     --toolbar-bg: rgba(36, 36, 36, 0.94);
     --toolbar-border: rgba(255,255,255,0.1);
     --toolbar-fg: #ddd;

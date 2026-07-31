@@ -15,7 +15,8 @@ import type { SplitInstance as Splitter } from 'split-grid';
 
 import mainCss from '../styles/main.css?raw';
 import toolbarCss from '../styles/toolbar.css?raw';
-import { previewThemeCss, hljsCss, codeCopyCss } from './styling';
+import pickerCss from '../styles/picker.css?raw';
+import { previewThemeCss, alertsCss, hljsCss, codeCopyCss } from './styling';
 
 const containerView = document.body;
 const gutterView = document.createElement('div');
@@ -39,8 +40,16 @@ export enum ViewMode {
 export function setUp() {
   appendStyle(mainCss);
   appendStyle(previewThemeCss());
+  // Theme-independent fallback for GitHub-style alerts. The 'github' theme's
+  // own base.css already styles them via a higher-specificity selector
+  // (.markdown-body .markdown-alert...), so this never overrides it there —
+  // it only fills the gap for every OTHER preview theme, none of which style
+  // alerts at all. Also needed unscoped (not just under .markdown-body) for
+  // the alert-type picker's preview, which renders outside the preview pane.
+  appendStyle(alertsCss());
   appendStyle(codeCopyCss());
   appendStyle(toolbarCss);
+  appendStyle(pickerCss);
 
   if (__FULL_BUILD__) {
     import('../styles/katex.css?raw').then(mod => appendStyle(mod.default));
@@ -195,12 +204,6 @@ export function isWysiwygEditLocked(): boolean {
   return states.wysiwygEditLock;
 }
 
-/** Registered by wysiwyg.ts to re-inject the toolbar after innerHTML replacement. */
-let postRenderHook: (() => void) | undefined;
-export function setPostRenderHook(fn: (() => void) | undefined): void {
-  postRenderHook = fn;
-}
-
 export async function renderHtmlPreview() {
   // Suppress re-render while the user is editing in the WYSIWYG pane.
   if (states.wysiwygEditLock) {
@@ -218,7 +221,6 @@ export async function renderHtmlPreview() {
 
   const html = replaceImageURLs(await getRenderedHtml());
   previewPane.innerHTML = html;
-  postRenderHook?.();
   invalidateBlockCache();
   requestAnimationFrame(() => {
     warmBlockCache(previewPane);

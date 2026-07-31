@@ -32,6 +32,8 @@ import { copyToSharedContainer, setUpQuickLook } from './src/quicklook';
 import { localized } from './src/shared/strings';
 import { macOSTahoe, hasFilePathInfo } from './src/shared/utils';
 import { enableWysiwyg, disableWysiwyg, isWysiwyg } from './src/wysiwyg';
+import { sourceExtensions } from './src/sourceToolbar';
+import { installUnifiedToolbar } from './src/unifiedToolbar';
 
 import {
   performSearch,
@@ -132,6 +134,9 @@ if (hasFullHost()) {
       }] : []),
     ],
   });
+
+  MarkEdit.addExtension(sourceExtensions());
+  installUnifiedToolbar();
 
   MarkEdit.addExtension(EditorView.updateListener.of(update => {
     if (!update.docChanged) {
