@@ -2,7 +2,32 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 
 const ModeCacheKey = 'ui.quicklook-mode';
+
+// happy-dom 20.9.0 exposes `localStorage` as a bare object with no methods at
+// all — not even getItem — so relying on the environment's own implementation
+// made every test in this file throw in beforeEach. These are unit tests for
+// mode.ts's logic, not for happy-dom's storage, so install a minimal in-memory
+// Storage ourselves and stay independent of what the DOM shim does this week.
+function installMemoryStorage() {
+  const map = new Map<string, string>();
+  const storage = {
+    getItem: (key: string) => (map.has(key) ? (map.get(key) as string) : null),
+    setItem: (key: string, value: string) => { map.set(key, String(value)); },
+    removeItem: (key: string) => { map.delete(key); },
+    clear: () => { map.clear(); },
+    key: (index: number) => Array.from(map.keys())[index] ?? null,
+    get length() { return map.size; },
+  };
+
+  for (const target of [globalThis, globalThis.window]) {
+    if (target !== undefined && target !== null) {
+      Object.defineProperty(target, 'localStorage', { configurable: true, value: storage });
+    }
+  }
+}
+
 beforeEach(() => {
+  installMemoryStorage();
   localStorage.clear();
   vi.resetModules();
 });
@@ -12,7 +37,17 @@ afterEach(() => {
 });
 
 describe('currentMode', () => {
-  it('returns "source" by default', async () => {
+  // Fork behavior: the default is 'preview', inverting upstream's 'source'.
+  // The Quick Look WebView has no persistent localStorage, so the stored value
+  // is absent on essentially every real preview — which makes this default the
+  // mode users actually get. See src/quicklook/mode.ts.
+  it('returns "preview" by default', async () => {
+    const { currentMode } = await import('../src/quicklook/mode');
+    expect(currentMode()).toBe('preview');
+  });
+
+  it('returns "source" when localStorage explicitly holds "source"', async () => {
+    localStorage.setItem(ModeCacheKey, 'source');
     const { currentMode } = await import('../src/quicklook/mode');
     expect(currentMode()).toBe('source');
   });
@@ -23,20 +58,20 @@ describe('currentMode', () => {
     expect(currentMode()).toBe('preview');
   });
 
-  it('treats any non-"preview" value as "source"', async () => {
+  it('treats any non-"source" value as "preview"', async () => {
     localStorage.setItem(ModeCacheKey, 'garbage');
     const { currentMode } = await import('../src/quicklook/mode');
-    expect(currentMode()).toBe('source');
+    expect(currentMode()).toBe('preview');
   });
 
   it('caches the first read; later localStorage mutations are ignored', async () => {
     const { currentMode } = await import('../src/quicklook/mode');
-    expect(currentMode()).toBe('source');
-    localStorage.setItem(ModeCacheKey, 'preview');
-    expect(currentMode()).toBe('source');
+    expect(currentMode()).toBe('preview');
+    localStorage.setItem(ModeCacheKey, 'source');
+    expect(currentMode()).toBe('preview');
   });
 
-  it('falls back to "source" when localStorage.getItem throws', async () => {
+  it('falls back to "preview" when localStorage.getItem throws', async () => {
     const original = window.localStorage;
     Object.defineProperty(window, 'localStorage', {
       configurable: true,
@@ -53,7 +88,7 @@ describe('currentMode', () => {
     try {
       const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
       const { currentMode } = await import('../src/quicklook/mode');
-      expect(currentMode()).toBe('source');
+      expect(currentMode()).toBe('preview');
       expect(errorSpy).toHaveBeenCalled();
     } finally {
       Object.defineProperty(window, 'localStorage', { configurable: true, value: original });
