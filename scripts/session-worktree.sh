@@ -5,7 +5,7 @@
 # Why: concurrent sessions in one checkout race each other — parallel rebuilds,
 # clobbered uncommitted work, HEAD moving underneath. A worktree gives this session
 # its own working dir + index + HEAD while sharing the object store. See
-# AG_DEV_POLICY.md §14.4 (Shared-Checkout & Worktree Discipline) and
+# dev-policy.md §2 (Session isolation) and
 # ~/Documents/Claude/preferences/operating-principles.md § Branch-state discipline.
 #
 # This is the FULL bootstrap: it doesn't just `git worktree add`, it makes the new
@@ -71,7 +71,7 @@ SBR=$(printf '%s' "$BRANCH" | tr '/' '-')
 
 # --- Resolve this repo's integration branch as a remote-tracking ref (origin/<branch>) ---
 # origin/HEAD is the WRONG signal on this fleet: it mirrors the remote's DEFAULT branch (main),
-# but dev-first repos (laforge/riker/obrien) integrate on 'dev'. Resolve, in order: (1) explicit
+# but dev-first repos integrate on 'dev'. Resolve, in order: (1) explicit
 # override git config ag.integrationBranch; (2) first EXISTING of origin/dev, origin/staging
 # (exact refs); (3) origin/HEAD. Kept byte-identical to new-session.sh — resolve once, both paths.
 resolve_base_ref() {
@@ -155,7 +155,39 @@ if [ "$DO_DEPS" -eq 1 ]; then
   deps() {
     if [ -f "$DEST/package.json" ]; then
       note "node project — installing deps"
-      if [ -f "$DEST/package-lock.json" ]; then ( cd "$DEST" && npm ci ); else ( cd "$DEST" && npm install ); fi
+      # Pick the package manager from the lockfile that's actually present, in precedence
+      # order — NOT from package-lock.json alone. A Yarn/pnpm project that also carries a
+      # stale package-lock.json (easy to acquire: one stray `npm install` years ago) would
+      # otherwise get `npm ci`, which fails hard the moment that lockfile is out of sync
+      # with package.json, and the worktree lands with no node_modules at all. Lived in
+      # markedit-preview, twice in one session (#133).
+      pm=npm-nolock
+      if   [ -f "$DEST/yarn.lock" ];                                then pm=yarn
+      elif [ -f "$DEST/pnpm-lock.yaml" ];                           then pm=pnpm
+      elif [ -f "$DEST/bun.lockb" ] || [ -f "$DEST/bun.lock" ];     then pm=bun
+      elif [ -f "$DEST/package-lock.json" ];                        then pm=npm
+      fi
+      # A lockfile whose tool isn't installed is worse than no lockfile — fall back rather
+      # than fail, since this whole block is best-effort and must never abort the run.
+      case "$pm" in
+        yarn|pnpm|bun)
+          command -v "$pm" >/dev/null 2>&1 || {
+            note "  ${pm}.lock present but ${pm} is not installed — falling back to npm install"
+            pm=npm-nolock
+          } ;;
+      esac
+      case "$pm" in
+        yarn)       note "  yarn.lock → yarn install"
+                    ( cd "$DEST" && { yarn install --frozen-lockfile || yarn install; } ) ;;
+        pnpm)       note "  pnpm-lock.yaml → pnpm install"
+                    ( cd "$DEST" && { pnpm install --frozen-lockfile || pnpm install; } ) ;;
+        bun)        note "  bun lockfile → bun install"
+                    ( cd "$DEST" && bun install ) ;;
+        npm)        note "  package-lock.json → npm ci"
+                    ( cd "$DEST" && npm ci ) ;;
+        npm-nolock) note "  no usable lockfile → npm install"
+                    ( cd "$DEST" && npm install ) ;;
+      esac
     elif [ -f "$DEST/pyproject.toml" ] || [ -f "$DEST/requirements.txt" ]; then
       note "python project — creating .venv + installing"
       ( cd "$DEST" && python3 -m venv .venv \
