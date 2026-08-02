@@ -102,6 +102,16 @@ fi
 # Vite's emptyOutDir wiping one mode's output when the other mode built.
 PRE_BUILD_EPOCH=$(date +%s)
 
+# Size of what is CURRENTLY deployed, captured before the build for the same reason.
+# The build itself deploys: markedit-vite's `markedit-copy-dist-file` plugin writes the
+# artifact into the Shared scripts folder as part of `vite build`, so by the time the
+# deploy section below runs, the old file is already gone. Reading it there compares the
+# new artifact against itself and the variant guard can never fire.
+PRE_BUILD_DEPLOYED_BYTES=0
+if [ -f "$HOME/Library/Group Containers/group.app.cyan.markedit/Shared/scripts/markedit-preview.js" ]; then
+  PRE_BUILD_DEPLOYED_BYTES=$(wc -c < "$HOME/Library/Group Containers/group.app.cyan.markedit/Shared/scripts/markedit-preview.js" | tr -d ' ')
+fi
+
 if $FULL_BUILD; then
   echo "  (full build with lint)"
   yarn build
@@ -138,6 +148,27 @@ fi
 SHARED="$HOME/Library/Group Containers/group.app.cyan.markedit/Shared/scripts"
 PRIVATE="$HOME/Library/Containers/app.cyan.markedit/Data/Documents/scripts"
 mkdir -p "$SHARED"
+
+# Variant-change guard. The byte-match check below only proves the deployed file
+# equals the build THIS run produced — it says nothing about whether that build is
+# the same VARIANT as what was already installed. So a plain `bash ship.sh` (lite)
+# run against a machine carrying the full build silently replaces ~5.0 MB with
+# ~315 KB and strips KaTeX + Mermaid, reporting success the whole way. That
+# happened on 2026-08-01 and was caught only by eyeballing the file size.
+# Compares against PRE_BUILD_DEPLOYED_BYTES, captured before the build — the build
+# deploys as a side effect, so reading the file here would compare it to itself.
+# Loud warning, not a hard failure: switching variants on purpose is legitimate.
+OLD_BYTES="$PRE_BUILD_DEPLOYED_BYTES"
+NEW_BYTES=$(wc -c < "$BUILT_JS" | tr -d ' ')
+# The two variants differ by ~16x; anything past 2x is a variant change, not drift.
+if [ "$OLD_BYTES" -gt 0 ] && { [ $(( NEW_BYTES * 2 )) -lt "$OLD_BYTES" ] || [ $(( OLD_BYTES * 2 )) -lt "$NEW_BYTES" ]; }; then
+  if $FULL_BUILD; then DIRECTION="lite → FULL (gaining KaTeX + Mermaid)"; else DIRECTION="FULL → lite (LOSING KaTeX + Mermaid)"; fi
+  echo ""
+  echo "⚠️  BUILD VARIANT CHANGE: deployed ${OLD_BYTES} bytes → shipping ${NEW_BYTES} bytes — ${DIRECTION}"
+  echo "    If that wasn't intended, re-run with the other flag (--full for the full build)."
+  echo ""
+fi
+
 cp "$BUILT_JS" "$SHARED/markedit-preview.js"
 if [ -d "$PRIVATE" ]; then
   cp "$BUILT_JS" "$PRIVATE/markedit-preview.js"

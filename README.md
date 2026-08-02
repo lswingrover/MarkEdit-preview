@@ -110,18 +110,22 @@ cd MarkEdit-preview
 # 2. Install dependencies
 yarn install
 
-# 3. Build
-LITE_BUILD=true yarn vite build
+# 3. Build (full — includes KaTeX + Mermaid)
+yarn build
 
 # 4. Deploy to MarkEdit
-cp dist/lite/markedit-preview.js \
+cp dist/markedit-preview.js \
   ~/Library/Group\ Containers/group.app.cyan.markedit/Shared/scripts/markedit-preview.js
 
 # 5. Restart MarkEdit
 osascript -e 'quit app "MarkEdit"' -e 'delay 1' -e 'launch app "MarkEdit"'
 ```
 
-> **Note:** `LITE_BUILD=true` skips KaTeX and Mermaid due to a broken `markedit-katex` package install (`src/index.ts` missing). The lite build includes all core markdown features plus scroll sync and WYSIWYG. If you need math rendering, fix the `markedit-katex` dependency and run `yarn vite build` without the env var.
+> **Note:** there are two build variants and **the full build is the one that ships here.** `yarn build` produces `dist/markedit-preview.js` (~5.0 MB) with KaTeX and Mermaid; `yarn build:lite` produces `dist/lite/markedit-preview.js` (~315 KB) without them. Both include all core markdown features plus scroll sync, WYSIWYG, and Quick Look.
+>
+> An earlier version of this note claimed the lite build was *required* because of a broken `markedit-katex` install (`src/index.ts` missing). That's no longer true — `vite.config.mts` carries an alias resolving `markedit-katex` straight to its TypeScript source, and the full build completes cleanly. Prefer `yarn build` unless you specifically want the smaller artifact.
+>
+> ⚠️ **Don't cross the variants when deploying.** The two builds write to different paths, and copying the wrong one silently strips math and diagram rendering. `ship.sh` picks the right path for you and warns if a ship would change the deployed variant — see [Fork maintenance](#fork-maintenance).
 
 The version is pinned ahead of upstream to prevent MarkEdit's built-in auto-updater from overwriting the fork with the upstream build.
 

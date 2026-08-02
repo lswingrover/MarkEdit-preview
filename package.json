@@ -28,7 +28,7 @@
     "cross-env": "^7.0.3",
     "esbuild": "^0.27.3",
     "eslint": "^9.27.0",
-    "happy-dom": "^20.8.9",
+    "happy-dom": "20.9.0",
     "markedit-api": "https://github.com/MarkEdit-app/MarkEdit-api#v0.26.0",
     "markedit-vite": "https://github.com/MarkEdit-app/MarkEdit-vite#v0.4.0",
     "typescript": "^5.0.0",
