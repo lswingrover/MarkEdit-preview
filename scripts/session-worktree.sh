@@ -72,11 +72,15 @@ SBR=$(printf '%s' "$BRANCH" | tr '/' '-')
 # --- Resolve this repo's integration branch as a remote-tracking ref (origin/<branch>) ---
 # origin/HEAD is the WRONG signal on this fleet: it mirrors the remote's DEFAULT branch (main),
 # but dev-first repos integrate on 'dev'. Resolve, in order: (1) explicit
-# override git config ag.integrationBranch; (2) first EXISTING of origin/dev, origin/staging
+# override git config session.integrationBranch; (2) first EXISTING of origin/dev, origin/staging
 # (exact refs); (3) origin/HEAD. Kept byte-identical to new-session.sh — resolve once, both paths.
 resolve_base_ref() {
   local d="${1:-.}" cfg cand def
-  cfg=$(git -C "$d" config --get ag.integrationBranch 2>/dev/null || true)
+  cfg=$(git -C "$d" config --get session.integrationBranch 2>/dev/null || true)
+  # Legacy key, read-only fallback. Renamed 2026-08-02 to drop an org prefix from a
+  # generic setting; no repo on this fleet sets either, but a clone elsewhere might, and
+  # silently ignoring a config someone set is worse than carrying two lines.
+  [ -z "${cfg:-}" ] && cfg=$(git -C "$d" config --get ag.integrationBranch 2>/dev/null || true)
   if [ -n "$cfg" ] && git -C "$d" show-ref --verify --quiet "refs/remotes/origin/$cfg"; then
     printf 'origin/%s\n' "$cfg"; return 0
   fi
@@ -155,39 +159,7 @@ if [ "$DO_DEPS" -eq 1 ]; then
   deps() {
     if [ -f "$DEST/package.json" ]; then
       note "node project — installing deps"
-      # Pick the package manager from the lockfile that's actually present, in precedence
-      # order — NOT from package-lock.json alone. A Yarn/pnpm project that also carries a
-      # stale package-lock.json (easy to acquire: one stray `npm install` years ago) would
-      # otherwise get `npm ci`, which fails hard the moment that lockfile is out of sync
-      # with package.json, and the worktree lands with no node_modules at all. Lived in
-      # markedit-preview, twice in one session (#133).
-      pm=npm-nolock
-      if   [ -f "$DEST/yarn.lock" ];                                then pm=yarn
-      elif [ -f "$DEST/pnpm-lock.yaml" ];                           then pm=pnpm
-      elif [ -f "$DEST/bun.lockb" ] || [ -f "$DEST/bun.lock" ];     then pm=bun
-      elif [ -f "$DEST/package-lock.json" ];                        then pm=npm
-      fi
-      # A lockfile whose tool isn't installed is worse than no lockfile — fall back rather
-      # than fail, since this whole block is best-effort and must never abort the run.
-      case "$pm" in
-        yarn|pnpm|bun)
-          command -v "$pm" >/dev/null 2>&1 || {
-            note "  ${pm}.lock present but ${pm} is not installed — falling back to npm install"
-            pm=npm-nolock
-          } ;;
-      esac
-      case "$pm" in
-        yarn)       note "  yarn.lock → yarn install"
-                    ( cd "$DEST" && { yarn install --frozen-lockfile || yarn install; } ) ;;
-        pnpm)       note "  pnpm-lock.yaml → pnpm install"
-                    ( cd "$DEST" && { pnpm install --frozen-lockfile || pnpm install; } ) ;;
-        bun)        note "  bun lockfile → bun install"
-                    ( cd "$DEST" && bun install ) ;;
-        npm)        note "  package-lock.json → npm ci"
-                    ( cd "$DEST" && npm ci ) ;;
-        npm-nolock) note "  no usable lockfile → npm install"
-                    ( cd "$DEST" && npm install ) ;;
-      esac
+      if [ -f "$DEST/package-lock.json" ]; then ( cd "$DEST" && npm ci ); else ( cd "$DEST" && npm install ); fi
     elif [ -f "$DEST/pyproject.toml" ] || [ -f "$DEST/requirements.txt" ]; then
       note "python project — creating .venv + installing"
       ( cd "$DEST" && python3 -m venv .venv \
