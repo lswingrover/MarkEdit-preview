@@ -1,10 +1,11 @@
 # MarkEdit-preview (lswingrover fork)
 
-A downstream fork of [MarkEdit-app/MarkEdit-preview](https://github.com/MarkEdit-app/MarkEdit-preview) that adds two features the upstream intentionally omits:
+A downstream fork of [MarkEdit-app/MarkEdit-preview](https://github.com/MarkEdit-app/MarkEdit-preview) that adds features the upstream intentionally omits:
 
 - **Lock-step scroll sync** — editor and preview track each other in real time, every animation frame, using RAF. No lag, no post-scroll drift. Upstream uses `scrollend` (fires after momentum stops); this fires on every `scroll` event.
 - **WYSIWYG editing** — the preview pane becomes directly editable with a sticky formatting toolbar. Edits convert back to Markdown via Turndown (GFM-aware) and sync to the CodeMirror source. Active by default.
 - **Print Rendered…** — prints the styled preview HTML (not raw Markdown) via the system print dialog. Available in the preview toolbar menu. Writes a temporary `~/.markedit-print.html` dotfile, opens it in the default browser, which shows the print dialog immediately on load and auto-closes the tab when done.
+- **Quick Look opens rendered** — pressing Space on a `.md` file in Finder shows formatted markdown, not raw source. Upstream opens on source and remembers a toggle in `localStorage`; the Quick Look WebView has no persistent `localStorage`, so that toggle never sticks.
 
 These are deliberate upstream non-features, not oversights. This fork exists for users who want them anyway.
 
@@ -36,6 +37,24 @@ Generates the same styled HTML as *Save Styled HTML* but instead of saving a fil
 The browser shows the macOS print dialog immediately. When you dismiss it (print or cancel), the tab closes automatically.
 
 **Fallback:** if writing the dotfile fails (permissions edge case), the standard Save panel appears instead so you can save and print manually.
+
+---
+
+### Quick Look opens rendered
+
+Pressing Space on a `.md` file in Finder shows **formatted markdown**. The segmented control in the Quick Look toolbar still switches to source (`#`) and back (eye) for the life of that window.
+
+Upstream defaults to source mode and persists your choice in `localStorage` — but the Quick Look extension's WebView has no persistent `localStorage` (its on-disk store stays empty), so every write is dropped and every read misses. Under upstream's default that means Quick Look shows raw markdown on every preview, forever, and the toggle never survives closing the window. Rendered markdown is the point of previewing a `.md` file, so it's the default here; only an explicit stored `'source'` opts out.
+
+> [!IMPORTANT]
+>
+> **The Quick Look host evaluates the whole bundle**, including module-scope code for features Quick Look never displays — `src/sourceToolbar.ts` builds a `new Compartment()` and a `Prec.highest(keymap.of(...))` at module scope. That host provides no `require`, so `src/quicklook/shim.ts` supplies one.
+>
+> **Any value (non-type) import from a shimmed module needs an entry in that shim**, whether or not Quick Look exercises it. A missing stub is not a degraded feature — it's a `TypeError` during module evaluation that kills the *entire* bundle before `main.ts` reaches `setUpQuickLook()`, and Quick Look silently falls back to the extension's own plain-source view. The symptom reads as a preference rather than a crash, which is exactly how it went unnoticed once already.
+>
+> `tests/quicklook.shim.test.ts` enforces this by scanning the source tree, so a new import fails the test run instead of Quick Look.
+
+**Testing it:** `qlmanage -t` and Finder's column-preview pane both use the *thumbnail* extension point, which this extension doesn't implement — they show plain text no matter what. Use the Space-bar panel or `qlmanage -p <file>.md`.
 
 ---
 
@@ -108,7 +127,7 @@ The version is pinned ahead of upstream to prevent MarkEdit's built-in auto-upda
 
 > [!TIP]
 >
-> In MarkEdit 1.33.0 or later, this extension also provides preview support in [Quick Look](https://github.com/MarkEdit-app/MarkEdit/wiki/Manual#quick-look-extension).
+> In MarkEdit 1.33.0 or later, this extension also provides preview support in [Quick Look](https://github.com/MarkEdit-app/MarkEdit/wiki/Manual#quick-look-extension) — the deploy step above is what installs it, since Quick Look loads the script straight out of the Group Container. In this fork it opens [rendered rather than on source](#quick-look-opens-rendered).
 >
 > To add menu items to the toolbar, see MarkEdit [Customization](https://github.com/MarkEdit-app/MarkEdit/wiki/Customization#editorcustomtoolbaritems) wiki.
 
@@ -168,7 +187,9 @@ MarkEdit.app (native Swift/AppKit)
 | `src/wysiwyg.ts` | WYSIWYG mode; wires the unified toolbar's show/hide + preview shortcut listener into the enable/disable lifecycle |
 | `src/unifiedToolbar.ts` | The one toolbar's DOM + focus-based routing between source/preview actions (new file) |
 | `src/toolbar.ts` | Preview-pane actions (execCommand/DOM), no toolbar DOM of its own (new file); preview-pane keyboard shortcut listener |
-| `src/sourceToolbar.ts` | Source-pane actions (CodeMirror transactions), no toolbar DOM of its own; always-on `keymap`; empty `showPanel` spacer sized to the unified toolbar's height (new file) |
+| `src/sourceToolbar.ts` | Source-pane actions (CodeMirror transactions), no toolbar DOM of its own; always-on `keymap`; empty `showPanel` spacer sized to the unified toolbar's height (new file). **Its module-scope `Compartment`/`Prec` usage is why `src/quicklook/shim.ts` must stay complete** |
+| `src/quicklook/shim.ts` | Stubs every runtime import from the shimmed modules — `Compartment`, `Prec`, `keymap`, `showPanel`, `EditorSelection` — not just the ones Quick Look uses. Guarded by `tests/quicklook.shim.test.ts` |
+| `src/quicklook/mode.ts` | Quick Look defaults to `'preview'` instead of upstream's `'source'`; only an explicit stored `'source'` opts out |
 | `src/sourceFormat.ts` | Pure Markdown-text transaction functions for the source pane (new file, unit tested in `tests/sourceFormat.test.ts`) |
 | `src/toolbarUI.ts` | Shared toolbar button DOM builder (new file) |
 | `src/shared/formatSpecs.ts` | Shared button/shortcut spec — single source of truth for the toolbar (new file) |
