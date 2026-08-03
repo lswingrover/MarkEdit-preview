@@ -9,6 +9,9 @@
 import { MarkEdit } from 'markedit-api';
 import { TOOLBAR_BUTTONS, matchesShortcut } from './shared/formatSpecs';
 import { pickAlertType } from './shared/alertPicker';
+import { pickMathTemplate } from './shared/mathPicker';
+import { pickMermaidTemplate } from './shared/mermaidPicker';
+import { mathMarkdown } from './shared/insertSpecs';
 import { nextFootnoteNumber } from './sourceFormat';
 
 let keydownListener: ((event: KeyboardEvent) => void) | undefined;
@@ -30,6 +33,8 @@ export const previewActionsById: Record<string, () => void> = {
   hr: () => exec('insertHorizontalRule'),
   alert: () => void insertAlert(),
   footnote: insertFootnote,
+  math: () => void insertMath(),
+  mermaid: () => void insertMermaid(),
 };
 
 /** Attach the keyboard-shortcut listener, scoped to the preview pane so it only
@@ -176,6 +181,66 @@ async function insertAlert(): Promise<void> {
   range.deleteContents();
   range.insertNode(blockquote);
   range.setStartAfter(blockquote);
+  range.collapse(true);
+  sel.removeAllRanges();
+  sel.addRange(range);
+  fireInput();
+}
+
+/**
+ * Insert KaTeX math at the cursor. The math string is emitted verbatim via a
+ * raw-markdown span (LaTeX is dense with `\`, `_`, `^`, `{` that Turndown
+ * would otherwise escape). Display math uses single-line `$$…$$` rather than
+ * the source pane's multi-line block form: a multi-line body inside an inline
+ * span would get its newlines collapsed on the HTML→Markdown round-trip, and
+ * `$$…$$` on one line still renders as display math.
+ *
+ * Like insertAlert, the range is captured BEFORE opening the picker — the
+ * popover removes its own option button synchronously during the click, which
+ * clears the page selection as a side effect.
+ */
+async function insertMath(): Promise<void> {
+  const sel = window.getSelection();
+  if (sel === null || sel.rangeCount === 0) {return;}
+  const range = sel.getRangeAt(0).cloneRange();
+
+  const template = await pickMathTemplate();
+  if (template === undefined) {return;}
+
+  const body = range.toString() || template.latex;
+  const node = rawMarkdownSpan(mathMarkdown(body, template.display));
+  range.deleteContents();
+  range.insertNode(node);
+  range.setStartAfter(node);
+  range.collapse(true);
+  sel.removeAllRanges();
+  sel.addRange(range);
+  fireInput();
+}
+
+/**
+ * Insert a Mermaid diagram as a real `<pre><code class="language-mermaid">`
+ * block — Turndown's GFM fenced-code rule reads the language off that class,
+ * so it round-trips to a ```mermaid fence, which the renderer turns back into
+ * a diagram. Range captured before the picker for the same reason as
+ * insertMath/insertAlert.
+ */
+async function insertMermaid(): Promise<void> {
+  const sel = window.getSelection();
+  if (sel === null || sel.rangeCount === 0) {return;}
+  const range = sel.getRangeAt(0).cloneRange();
+
+  const template = await pickMermaidTemplate();
+  if (template === undefined) {return;}
+
+  const pre = document.createElement('pre');
+  const code = document.createElement('code');
+  code.className = 'language-mermaid';
+  code.textContent = range.toString() || template.code;
+  pre.appendChild(code);
+  range.deleteContents();
+  range.insertNode(pre);
+  range.setStartAfter(pre);
   range.collapse(true);
   sel.removeAllRanges();
   sel.addRange(range);

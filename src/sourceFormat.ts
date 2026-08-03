@@ -141,6 +141,60 @@ export function computeFootnoteTransaction(state: EditorState): TransactionSpec 
   });
 }
 
+/**
+ * Insert KaTeX math. Inline (`$…$`) wraps the selection in place; display
+ * (`$$…$$`) is inserted as its own block with surrounding blank lines so the
+ * math renderer treats it as a display block. When there's a selection its
+ * text is used as the body (letting a user select existing LaTeX and wrap
+ * it); otherwise `latex` is inserted and left selected so it's typed over.
+ */
+export function computeMathTransaction(state: EditorState, latex: string, display: boolean): TransactionSpec {
+  return state.changeByRange(range => {
+    const { from, to } = range;
+    const body = state.doc.sliceString(from, to) || latex;
+
+    if (!display) {
+      const insert = `$${body}$`;
+      return {
+        changes: { from, to, insert },
+        range: EditorSelection.range(from + 1, from + 1 + body.length),
+      };
+    }
+
+    const line = state.doc.lineAt(from);
+    const needsLeadingNewline = line.text.slice(0, from - line.from).trim() !== '';
+    const lead = needsLeadingNewline ? '\n\n' : '';
+    const insert = `${lead}$$\n${body}\n$$\n`;
+    const bodyStart = from + lead.length + 3; // past "$$\n"
+    return {
+      changes: { from, to, insert },
+      range: EditorSelection.range(bodyStart, bodyStart + body.length),
+    };
+  });
+}
+
+/**
+ * Insert a fenced ```mermaid diagram block with surrounding blank lines so it
+ * parses as its own fence. The diagram body is left selected so a starter
+ * template can be typed over. When there's a selection its text becomes the
+ * body instead of `code`.
+ */
+export function computeMermaidTransaction(state: EditorState, code: string): TransactionSpec {
+  return state.changeByRange(range => {
+    const { from, to } = range;
+    const body = state.doc.sliceString(from, to) || code;
+    const line = state.doc.lineAt(from);
+    const needsLeadingNewline = line.text.slice(0, from - line.from).trim() !== '';
+    const lead = needsLeadingNewline ? '\n\n' : '';
+    const insert = `${lead}\`\`\`mermaid\n${body}\n\`\`\`\n`;
+    const bodyStart = from + lead.length + '```mermaid\n'.length;
+    return {
+      changes: { from, to, insert },
+      range: EditorSelection.range(bodyStart, bodyStart + body.length),
+    };
+  });
+}
+
 /** Insert a Markdown horizontal rule, adding blank lines around it if needed so it actually renders as one. */
 export function computeHorizontalRuleTransaction(state: EditorState): TransactionSpec {
   return state.changeByRange(range => {

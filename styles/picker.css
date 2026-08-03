@@ -65,6 +65,61 @@
   background: var(--toolbar-hover, rgba(0,0,0,0.08));
 }
 
+/* ── Menu picker (math / mermaid templates) ───────────────────────────────── */
+
+.menu-picker-option {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 16px;
+  width: 100%;
+  border: none;
+  background: transparent;
+  padding: 6px 8px;
+  border-radius: 6px;
+  cursor: pointer;
+  text-align: left;
+  color: var(--toolbar-fg, #333);
+  font-family: -apple-system, BlinkMacSystemFont, sans-serif;
+}
+
+.menu-picker-option:hover,
+.menu-picker-option:focus-visible {
+  background: var(--toolbar-hover, rgba(0,0,0,0.08));
+}
+
+.menu-picker-label {
+  font-size: 13px;
+}
+
+.menu-picker-hint {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 11px;
+  opacity: 0.55;
+  white-space: nowrap;
+}
+
+.menu-picker-cancel {
+  display: block;
+  width: 100%;
+  border: none;
+  background: transparent;
+  margin-top: 4px;
+  padding: 6px;
+  border-radius: 6px;
+  border-top: 1px solid var(--toolbar-border, rgba(0,0,0,0.1));
+  color: var(--toolbar-fg, #333);
+  font-size: 12px;
+  font-family: -apple-system, BlinkMacSystemFont, sans-serif;
+  cursor: pointer;
+  text-align: center;
+}
+
+.menu-picker-cancel:hover,
+.menu-picker-cancel:focus-visible {
+  background: var(--toolbar-hover, rgba(0,0,0,0.08));
+}
+
 /* Dark mode — reuses the toolbar's own variables where they overlap. */
 @media (prefers-color-scheme: dark) {
   .formatting-picker-popover {

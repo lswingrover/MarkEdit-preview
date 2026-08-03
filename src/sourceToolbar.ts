@@ -16,6 +16,8 @@ import type { Extension, TransactionSpec } from '@codemirror/state';
 import { MarkEdit } from 'markedit-api';
 import { TOOLBAR_BUTTONS } from './shared/formatSpecs';
 import { pickAlertType } from './shared/alertPicker';
+import { pickMathTemplate } from './shared/mathPicker';
+import { pickMermaidTemplate } from './shared/mermaidPicker';
 import {
   computeWrapTransaction,
   computeHeadingTransaction,
@@ -26,6 +28,8 @@ import {
   computeOrderedListTransaction,
   computeAlertTransaction,
   computeFootnoteTransaction,
+  computeMathTransaction,
+  computeMermaidTransaction,
 } from './sourceFormat';
 
 const spacerCompartment = new Compartment();
@@ -54,7 +58,21 @@ export function sourceActionsFor(view: EditorView): Record<string, () => void> {
     hr: () => dispatch(view, computeHorizontalRuleTransaction(view.state)),
     alert: () => void insertAlert(view),
     footnote: () => dispatch(view, computeFootnoteTransaction(view.state)),
+    math: () => void insertMath(view),
+    mermaid: () => void insertMermaid(view),
   };
+}
+
+async function insertMath(view: EditorView): Promise<void> {
+  const template = await pickMathTemplate();
+  if (template === undefined) {return;}
+  dispatch(view, computeMathTransaction(view.state, template.latex, template.display));
+}
+
+async function insertMermaid(view: EditorView): Promise<void> {
+  const template = await pickMermaidTemplate();
+  if (template === undefined) {return;}
+  dispatch(view, computeMermaidTransaction(view.state, template.code));
 }
 
 async function insertLink(view: EditorView): Promise<void> {

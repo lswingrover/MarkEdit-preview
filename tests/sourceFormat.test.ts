@@ -11,6 +11,8 @@ import {
   computeAlertTransaction,
   nextFootnoteNumber,
   computeFootnoteTransaction,
+  computeMathTransaction,
+  computeMermaidTransaction,
 } from '../src/sourceFormat';
 
 function stateFor(doc: string, from: number, to = from): EditorState {
@@ -239,5 +241,58 @@ describe('computeFootnoteTransaction', () => {
     const state = stateFor(doc, doc.length);
     const next = state.update(computeFootnoteTransaction(state)).state;
     expect(next.doc.toString()).toBe('first[^1][^2]\n\n[^2]: ');
+  });
+});
+
+describe('computeMathTransaction', () => {
+  it('inserts inline math and selects the placeholder body', () => {
+    const state = stateFor('', 0);
+    const next = state.update(computeMathTransaction(state, 'x', false)).state;
+    expect(next.doc.toString()).toBe('$x$');
+    expect(next.selection.main.from).toBe(1);
+    expect(next.selection.main.to).toBe(2);
+  });
+
+  it('wraps an existing selection as inline math', () => {
+    const state = stateFor('a=b', 0, 3);
+    const next = state.update(computeMathTransaction(state, 'PLACEHOLDER', false)).state;
+    expect(next.doc.toString()).toBe('$a=b$');
+    expect(next.selection.main.from).toBe(1);
+    expect(next.selection.main.to).toBe(4);
+  });
+
+  it('inserts display math as its own block at line start', () => {
+    const state = stateFor('', 0);
+    const next = state.update(computeMathTransaction(state, 'E=mc^2', true)).state;
+    expect(next.doc.toString()).toBe('$$\nE=mc^2\n$$\n');
+    // body selected
+    expect(next.doc.sliceString(next.selection.main.from, next.selection.main.to)).toBe('E=mc^2');
+  });
+
+  it('adds a leading blank line for display math mid-line', () => {
+    const state = stateFor('text', 4);
+    const next = state.update(computeMathTransaction(state, 'y', true)).state;
+    expect(next.doc.toString()).toBe('text\n\n$$\ny\n$$\n');
+  });
+});
+
+describe('computeMermaidTransaction', () => {
+  it('inserts a fenced mermaid block and selects the body', () => {
+    const state = stateFor('', 0);
+    const next = state.update(computeMermaidTransaction(state, 'graph TD')).state;
+    expect(next.doc.toString()).toBe('```mermaid\ngraph TD\n```\n');
+    expect(next.doc.sliceString(next.selection.main.from, next.selection.main.to)).toBe('graph TD');
+  });
+
+  it('uses the selection as the diagram body when present', () => {
+    const state = stateFor('pie showData', 0, 12);
+    const next = state.update(computeMermaidTransaction(state, 'TEMPLATE')).state;
+    expect(next.doc.toString()).toBe('```mermaid\npie showData\n```\n');
+  });
+
+  it('adds a leading blank line mid-line', () => {
+    const state = stateFor('x', 1);
+    const next = state.update(computeMermaidTransaction(state, 'graph TD')).state;
+    expect(next.doc.toString()).toBe('x\n\n```mermaid\ngraph TD\n```\n');
   });
 });
