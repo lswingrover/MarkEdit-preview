@@ -45,6 +45,11 @@ export const TOOLBAR_BUTTONS: ToolbarSpec[] = [
   { id: 'sep4', label: '', title: '', isSep: true },
   { id: 'alert', label: '&#9888;', title: 'Alert / callout (always inserts a NOTE — edit the word to change type)', shortcut: { domKey: 'a', cmKey: 'Mod-Alt-a', alt: true, display: '⌥⌘A' } },
   { id: 'footnote', label: '[^]', title: 'Insert footnote', shortcut: { domKey: 'f', cmKey: 'Mod-Alt-f', alt: true, display: '⌥⌘F' } },
+  { id: 'sep5', label: '', title: '', isSep: true },
+  // Menu buttons — these open a template picker rather than acting directly,
+  // so they carry no keyboard shortcut (nothing to bind to a single action).
+  { id: 'math', label: '&#8721;x', title: 'Insert math (KaTeX)' },
+  { id: 'mermaid', label: '&#9096;', title: 'Insert diagram (Mermaid)' },
 ];
 
 /** Does this DOM KeyboardEvent match the given shortcut? Cmd (Mod) is always required. */
