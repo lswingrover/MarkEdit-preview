@@ -1,5 +1,13 @@
 # Changelog
 
+## [1.10.1] — 2026-08-03
+
+- docs: document math (KaTeX) and mermaid toolbar menus
+
+Files changed in this ship:
+- M dist/markedit-preview.js
+- M package.json
+
 ## [1.10.0] — 2026-08-03
 
 - feat(toolbar): math (KaTeX) and mermaid insertion menus
