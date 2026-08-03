@@ -72,7 +72,7 @@ One toolbar spans the full window width, fixed above whichever pane(s) are visib
 
 **Action routing:** each button click checks which pane currently has focus (`MarkEdit.editorView.hasFocus`) and dispatches to that pane's implementation — Markdown-text CodeMirror transactions (`src/sourceFormat.ts`, via `src/sourceToolbar.ts`) for the source pane, `execCommand`/DOM edits (`src/toolbar.ts`) for the preview pane. Keyboard shortcuts work the same way but can't be unified into one listener, since a keydown event is inherently scoped to whichever element has focus — a CodeMirror `keymap` extension (always active) covers the source pane, a `keydown` listener on the preview pane (active only while WYSIWYG is on) covers the other.
 
-**Toolbar actions:** H1 / H2 / H3, Bold, Italic, Strikethrough, Inline code, Code block, Blockquote, Unordered list, Ordered list, Link, Image, Horizontal rule, Alert/callout, Footnote
+**Toolbar actions:** H1 / H2 / H3, Bold, Italic, Strikethrough, Inline code, Code block, Blockquote, Unordered list, Ordered list, Link, Image, Horizontal rule, Alert/callout, Footnote, Math (KaTeX), Diagram (Mermaid)
 
 **Toggle-aware:** Bold/Italic/Strikethrough/Inline-code and Blockquote/lists remove their own markup if applied again, on both panes. Code block and Alert/callout are not toggles (always insert fresh) — reliable toggle-detection for a construct with its own marker/fence line isn't worth the complexity.
 
@@ -91,6 +91,8 @@ One toolbar spans the full window width, fixed above whichever pane(s) are visib
 **Alert/callout** opens a popover (`src/shared/alertPicker.ts`, built on the reusable `src/shared/pickerPopover.ts`) showing all five [GitHub alert types](https://github.com/orgs/community/discussions/16925) — Note / Tip / Important / Warning / Caution — each as its actual rendered appearance (same `.markdown-alert-*` CSS classes and octicon SVGs `markdown-it-github-alerts` itself produces, not plain text labels), plus a Cancel button. Escape or clicking outside also cancels. Picking one inserts `> [!TYPE]`.
 
 **Footnote** inserts `[^N]` at the cursor (N = next unused number) and appends `[^N]: ` at the end of the document. The cursor stays right after the inserted reference, not the definition — scroll down when you're ready to write it. (Parking the cursor in the definition seemed convenient at first, but meant a second footnote/anything, done without clicking back into the main text first, landed in the footnote zone instead — see the `computeFootnoteTransaction` doc comment.)
+
+**Math (KaTeX)** and **Diagram (Mermaid)** open template menus (`src/shared/mathPicker.ts` / `src/shared/mermaidPicker.ts`, both built on the reusable `src/shared/menuPicker.ts` labelled-list popover). Math offers Inline / Display / Fraction / Square root / Summation / Integral / Matrix, inserting `$…$` or `$$…$$`; Mermaid offers Flowchart / Sequence / Class / State / ER / Gantt / Pie, inserting a ` ```mermaid ` fenced block. Both menus draw from one shared spec (`src/shared/insertSpecs.ts`) so the source and preview panes insert identical bodies. A live selection becomes the body; otherwise a starter template is inserted and left selected to type over. As menu buttons they carry no keyboard shortcut. On the preview side, math is emitted through a `raw-markdown` span (LaTeX verbatim) and Mermaid through a `<pre><code class="language-mermaid">` that Turndown round-trips to a fence — only the full build renders either.
 
 Both preview-side alert/footnote actions insert their markdown-syntax markers (`[!TYPE]`, `[^N]`, `[^N]: `) wrapped in a `raw-markdown`-tagged span, with a matching Turndown rule (in `wysiwyg.ts`) that emits them verbatim. Turndown otherwise escapes markdown-special characters in ordinary text by default (so a user literally typing `[x]` doesn't accidentally produce a link) — which previously corrupted our deliberately-inserted syntax into `\[^N\]`, breaking both the footnote and the next-footnote-number detection downstream.
 
@@ -171,6 +173,10 @@ MarkEdit.app (native Swift/AppKit)
         ├── src/toolbarUI.ts           ← shared button-DOM builder
         ├── src/shared/formatSpecs.ts  ← single source of truth: buttons, labels, shortcuts
         ├── src/shared/alertPicker.ts  ← shared alert-type picker (Note/Tip/Important/Warning/Caution)
+        ├── src/shared/insertSpecs.ts  ← math/mermaid templates (shared by both panes)
+        ├── src/shared/menuPicker.ts   ← reusable labelled-list popover menu
+        ├── src/shared/mathPicker.ts   ← math (KaTeX) template menu
+        ├── src/shared/mermaidPicker.ts ← mermaid diagram template menu
         └── src/shared/pickerPopover.ts ← reusable anchored popover: Escape/outside-click/Cancel all resolve undefined
 ```
 
