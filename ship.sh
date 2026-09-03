@@ -8,8 +8,14 @@
 #   bash ship.sh --push --minor         # push with a minor bump instead of patch
 #   bash ship.sh --push --major         # push with a major bump
 #   bash ship.sh --push --version=1.9.1 # push with an explicit version (skips auto-bump)
-#   bash ship.sh --reload               # restart MarkEdit after deploy
-#   bash ship.sh --push --reload        # all of the above
+#   bash ship.sh --no-reload            # deploy but DON'T restart MarkEdit
+#
+# Reload is ON by default: after every deploy MarkEdit is restarted so the new
+# bundle is actually live. A running MarkEdit won't pick up a re-deployed bundle
+# until it relaunches, which reads as "my extensions didn't change" — reloading
+# by default closes that gap. Pass --no-reload for a quiet local build that
+# leaves your current MarkEdit session untouched. (--reload is still accepted as
+# a no-op, since reload is now the default.)
 #
 # Version is only ever touched on a --push run — a plain build:deploy for
 # local testing never rewrites package.json.
@@ -30,7 +36,7 @@ export PATH=/opt/homebrew/bin:/usr/local/bin:$PATH
 
 FULL_BUILD=false
 DO_PUSH=false
-DO_RELOAD=false
+DO_RELOAD=true   # reload MarkEdit after deploy by default; --no-reload opts out
 BUMP_KIND="patch"
 EXPLICIT_VERSION=""
 
@@ -38,7 +44,8 @@ for arg in "$@"; do
   case "$arg" in
     --full)       FULL_BUILD=true ;;
     --push)       DO_PUSH=true ;;
-    --reload)     DO_RELOAD=true ;;
+    --reload)     DO_RELOAD=true ;;   # no-op now (reload is the default); kept for back-compat
+    --no-reload)  DO_RELOAD=false ;;
     --minor)      BUMP_KIND="minor" ;;
     --major)      BUMP_KIND="major" ;;
     --version=*)  EXPLICIT_VERSION="${arg#--version=}" ;;
