@@ -3243,9 +3243,9 @@ __metadata:
   languageName: node
   linkType: hard
 
-"markedit-api@https://github.com/MarkEdit-app/MarkEdit-api#v0.26.0":
+"markedit-api@git+https://github.com/MarkEdit-app/MarkEdit-api.git#v0.26.0":
   version: 0.26.0
-  resolution: "markedit-api@git+ssh://git@github.com/MarkEdit-app/MarkEdit-api.git#commit=ffa8606837737882102aad18fcdd080735a9cb26"
+  resolution: "markedit-api@https://github.com/MarkEdit-app/MarkEdit-api.git#commit=ffa8606837737882102aad18fcdd080735a9cb26"
   peerDependencies:
     "@codemirror/autocomplete": ^6.0.0
     "@codemirror/commands": ^6.0.0
@@ -3262,9 +3262,9 @@ __metadata:
   languageName: node
   linkType: hard
 
-"markedit-katex@https://github.com/MarkEdit-app/MarkEdit-katex#v1.1.5":
+"markedit-katex@git+https://github.com/MarkEdit-app/MarkEdit-katex.git#v1.1.5":
   version: 1.1.5
-  resolution: "markedit-katex@git+ssh://git@github.com/MarkEdit-app/MarkEdit-katex.git#commit=8944d16c5ca52776ecd256a611f38fb0dff311a1"
+  resolution: "markedit-katex@https://github.com/MarkEdit-app/MarkEdit-katex.git#commit=8944d16c5ca52776ecd256a611f38fb0dff311a1"
   dependencies:
     katex: "npm:^0.16.4"
   checksum: 10c0/e0ab993f9df61590afafb2630009f6242f4b20baee144ff3894351614d590f44d2a0c17569e782aea02bf8469f40af33bb447e80421c3a22aa357078b8c5a9a7
@@ -3302,9 +3302,9 @@ __metadata:
     markdown-it-highlightjs: "npm:^4.3.0"
     markdown-it-link-attributes: "npm:^4.0.1"
     markdown-it-task-lists: "npm:^2.1.1"
-    markedit-api: "https://github.com/MarkEdit-app/MarkEdit-api#v0.26.0"
-    markedit-katex: "https://github.com/MarkEdit-app/MarkEdit-katex#v1.1.5"
-    markedit-vite: "https://github.com/MarkEdit-app/MarkEdit-vite#v0.4.0"
+    markedit-api: "git+https://github.com/MarkEdit-app/MarkEdit-api.git#v0.26.0"
+    markedit-katex: "git+https://github.com/MarkEdit-app/MarkEdit-katex.git#v1.1.5"
+    markedit-vite: "git+https://github.com/MarkEdit-app/MarkEdit-vite.git#v0.4.0"
     mermaid: "npm:^11.15.0"
     patch-package: "npm:^8.0.0"
     split-grid: "npm:^1.0.11"
@@ -3317,9 +3317,9 @@ __metadata:
   languageName: unknown
   linkType: soft
 
-"markedit-vite@https://github.com/MarkEdit-app/MarkEdit-vite#v0.4.0":
+"markedit-vite@git+https://github.com/MarkEdit-app/MarkEdit-vite.git#v0.4.0":
   version: 0.4.0
-  resolution: "markedit-vite@git+ssh://git@github.com/MarkEdit-app/MarkEdit-vite.git#commit=ab1f26c8676ebcd20b62009e24412774a1702164"
+  resolution: "markedit-vite@https://github.com/MarkEdit-app/MarkEdit-vite.git#commit=ab1f26c8676ebcd20b62009e24412774a1702164"
   peerDependencies:
     vite: ^5.0.0 || ^6.0.0 || ^7.0.0
   checksum: 10c0/9ca72da444b877884fa2dc2b95126ff4a535640dda03c4d85479045f392b295d1a3dca80810c1ea936eac1b82a6c6663c465b44bc29c021ebe48940c06a40c34
