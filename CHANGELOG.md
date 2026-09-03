@@ -1,5 +1,18 @@
 # Changelog
 
+## [1.10.2] — 2026-09-03
+
+- chore(deps): clear all open Dependabot advisories — mermaid 11.17.2, js-yaml 4.3.2, dompurify 3.4.14, linkify-it 5.0.2, postcss 8.5.28, brace-expansion 1.1.18/5.0.9, esbuild 0.28.2
+- build: adopt Yarn 4.18.0 (Berry) as the pinned project package manager (`packageManager` field). Classic yarn 1.x cannot install this dep set (vitest4/vite7 hoist bug); Berry with the node-modules linker installs cleanly and fixes CI too
+- fix: declare the `patch-package` devDep that `postinstall` requires (was referenced but undeclared, so installs half-failed)
+- verified: lint clean, 179 tests pass, bundle rebuilt with KaTeX + Mermaid intact
+
+Files changed in this ship:
+- M package.json
+- M yarn.lock
+- M dist/markedit-preview.js
+- M .gitignore
+
 ## [1.10.1] — 2026-08-03
 
 - docs: document math (KaTeX) and mermaid toolbar menus
