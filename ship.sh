@@ -34,6 +34,31 @@ cd "$SCRIPT_DIR"
 
 export PATH=/opt/homebrew/bin:/usr/local/bin:$PATH
 
+# ── Yarn Berry bootstrap ────────────────────────────────────────────────────
+# This is a Yarn Berry project (package.json packageManager: yarn@4.x). The
+# ambient `yarn` is Volta's classic 1.x, which REFUSES to run against a
+# packageManager pin ("Corepack must currently be enabled"). Point every yarn
+# call in this script — and the nested `yarn lint` inside the build script — at
+# corepack's Berry shim by putting it first on PATH. corepack ships with node
+# but Volta doesn't expose it, so find it in the active node's image bin dir.
+if ! yarn --version >/dev/null 2>&1 || [ "$(yarn --version 2>/dev/null | cut -d. -f1)" = "1" ]; then
+  COREPACK=""
+  for c in "$(command -v corepack 2>/dev/null)" \
+           "$HOME/.volta/tools/image/node/$(node -v 2>/dev/null | tr -d v)/bin/corepack" \
+           $(ls -t "$HOME"/.volta/tools/image/node/*/bin/corepack 2>/dev/null); do
+    [ -n "$c" ] && [ -x "$c" ] && { COREPACK="$c"; break; }
+  done
+  if [ -n "$COREPACK" ]; then
+    CP_SHIM="$(mktemp -d)"
+    "$COREPACK" enable --install-directory "$CP_SHIM" yarn >/dev/null 2>&1 || true
+    export PATH="$CP_SHIM:$PATH"
+  fi
+  if ! yarn --version >/dev/null 2>&1 || [ "$(yarn --version 2>/dev/null | cut -d. -f1)" = "1" ]; then
+    echo "❌ Could not activate Yarn Berry (need corepack). Run 'corepack enable' and retry." >&2
+    exit 1
+  fi
+fi
+
 # FULL build is the default: it carries KaTeX + Mermaid. The lite build strips
 # them, so it must be asked for explicitly (--lite) — a plain run can no longer
 # silently downgrade a full deployment to lite (that footgun bit on 2026-08-01
