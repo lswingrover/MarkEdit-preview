@@ -24,6 +24,9 @@ jobs:
           cache: 'npm'
           cache-dependency-path: '**/yarn.lock'
 
+      - name: Enable Corepack
+        run: corepack enable
+
       - name: Run lint and test
         run: |
           yarn install
