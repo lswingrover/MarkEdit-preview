@@ -2,8 +2,8 @@
 # ship.sh — Build and deploy markedit-preview, optionally commit + tag + push
 #
 # Usage:
-#   bash ship.sh                        # build:lite + deploy only, no version change
-#   bash ship.sh --full                 # full build (lint + katex/mermaid) + deploy
+#   bash ship.sh                        # FULL build (lint + katex/mermaid) + deploy, no version change
+#   bash ship.sh --lite                 # fast lite build (skips lint) — NO katex/mermaid; must ask for it
 #   bash ship.sh --push                 # + auto patch-bump, git commit + tag + push
 #   bash ship.sh --push --minor         # push with a minor bump instead of patch
 #   bash ship.sh --push --major         # push with a major bump
@@ -34,7 +34,11 @@ cd "$SCRIPT_DIR"
 
 export PATH=/opt/homebrew/bin:/usr/local/bin:$PATH
 
-FULL_BUILD=false
+# FULL build is the default: it carries KaTeX + Mermaid. The lite build strips
+# them, so it must be asked for explicitly (--lite) — a plain run can no longer
+# silently downgrade a full deployment to lite (that footgun bit on 2026-08-01
+# and again 2026-09-03).
+FULL_BUILD=true
 DO_PUSH=false
 DO_RELOAD=true   # reload MarkEdit after deploy by default; --no-reload opts out
 BUMP_KIND="patch"
@@ -42,7 +46,8 @@ EXPLICIT_VERSION=""
 
 for arg in "$@"; do
   case "$arg" in
-    --full)       FULL_BUILD=true ;;
+    --full)       FULL_BUILD=true ;;   # no-op now (full is the default); kept for back-compat
+    --lite)       FULL_BUILD=false ;;  # opt IN to the stripped build (no KaTeX/Mermaid)
     --push)       DO_PUSH=true ;;
     --reload)     DO_RELOAD=true ;;   # no-op now (reload is the default); kept for back-compat
     --no-reload)  DO_RELOAD=false ;;
