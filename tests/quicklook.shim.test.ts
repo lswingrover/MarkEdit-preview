@@ -78,7 +78,6 @@ function loadShim(): (id: string) => Record<string, unknown> {
   const previous = host.require;
   try {
     host.require = undefined;
-    // eslint-disable-next-line @typescript-eslint/no-implied-eval
     new Function(code)();
     const installed = host.require;
     expect(typeof installed).toBe('function');

@@ -23,6 +23,8 @@
  */
 
 import type { MarkEdit as RealMarkEdit } from 'markedit-api';
+import type * as CodeMirrorView from '@codemirror/view';
+import type * as CodeMirrorState from '@codemirror/state';
 
 type Globals = {
   MarkEdit?: RealMarkEdit;
@@ -31,35 +33,56 @@ type Globals = {
 
 const host = globalThis as unknown as Globals;
 if (typeof host.require === 'undefined') {
-  // An extension value that any CodeMirror `.of()`/`.reconfigure()` can return.
+  type ViewModule = typeof CodeMirrorView;
+  type StateModule = typeof CodeMirrorState;
+  // fork: an extension value that any CodeMirror `.of()`/`.reconfigure()` can return.
   const noopExtension = () => ({});
 
   const markeditApi = {
     MarkEdit: host.MarkEdit ?? (Object.freeze({}) as RealMarkEdit),
   };
 
+  const inertFacet = { of: () => ({}) };
+  const inertDecoration = () => ({ range: () => ({}) });
+  class InertBase {}
+
   const codemirrorView = {
     EditorView: {
-      updateListener: { of: noopExtension },
+      updateListener: inertFacet,
+      mouseSelectionStyle: inertFacet,
+      editorAttributes: inertFacet,
+      baseTheme: () => ({}),
     },
-    // sourceToolbar.ts — evaluated at module scope via Prec.highest(keymap.of(...))
+    Decoration: {
+      mark: inertDecoration,
+      line: inertDecoration,
+    },
+    ViewPlugin: { fromClass: () => ({}) },
+    WidgetType: InertBase,
+    RectangleMarker: InertBase,
+    layer: () => ({}),
+    // upstream — Direction enum (LTR/RTL), read at module scope
+    Direction: { LTR: 0, RTL: 1 },
+    // fork — sourceToolbar.ts: evaluated at module scope via Prec.highest(keymap.of(...))
     keymap: { of: noopExtension },
-    // sourceToolbar.ts — spacer panel, only called from the full host
+    // fork — sourceToolbar.ts: spacer panel, only called from the full host
     showPanel: { of: noopExtension },
-  };
+  } as unknown as ViewModule;
 
   const codemirrorState = {
     Annotation: {
-      define: () => ({ of: noopExtension }),
+      define: () => ({ of: () => ({}) }),
     },
-    // sourceToolbar.ts:31 — `new Compartment()` at module scope. Without this the
-    // whole bundle throws in Quick Look. Must be constructible.
+    // sourceToolbar.ts:31 — `new Compartment()` at module scope; must be constructible,
+    // and the fork reads `.get`.
     Compartment: class {
-      of = noopExtension;
-      reconfigure = noopExtension;
-      get = () => undefined;
+      of() { return {}; }
+      reconfigure() { return {}; }
+      get() { return undefined; }
     },
-    // sourceToolbar.ts — Prec.highest(...) at module scope; pass the value through.
+    Facet: { define: () => inertFacet },
+    StateField: { define: () => ({}) },
+    // fork — sourceToolbar.ts: Prec.highest(...) at module scope; pass the value through.
     Prec: {
       highest: <T>(x: T) => x,
       high: <T>(x: T) => x,
@@ -67,14 +90,14 @@ if (typeof host.require === 'undefined') {
       low: <T>(x: T) => x,
       lowest: <T>(x: T) => x,
     },
-    // sourceFormat.ts — only called from the full host, but must exist to evaluate.
+    // fork — sourceFormat.ts: only called from the full host, but must exist to evaluate.
     EditorSelection: {
       cursor: (pos: number) => ({ from: pos, to: pos }),
       range: (from: number, to: number) => ({ from, to }),
       single: (from: number, to: number) => ({ from, to }),
       create: () => ({}),
     },
-  };
+  } as unknown as StateModule;
 
   const stubs: Record<string, unknown> = {
     'markedit-api': markeditApi,

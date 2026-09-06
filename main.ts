@@ -25,12 +25,12 @@ import {
 
 import { enableHoverPreview } from './src/features/image';
 import { startObserving } from './src/scroll';
-import { checkForUpdates, checkForUpdatesThrottled, downloadLatestBuild, fetchLatestRelease, renderUpdatePill } from './src/support/updater';
-import { imageHoverPreview, keyboardShortcut, updateBehavior } from './src/support/settings';
+import { imageHoverPreview, keyboardShortcut } from './src/support/settings';
 import { hasFullHost } from './src/support/host';
 import { copyToSharedContainer, setUpQuickLook } from './src/quicklook';
 import { localized } from './src/shared/strings';
-import { macOSTahoe, hasFilePathInfo } from './src/shared/utils';
+import { macOSTahoe } from './src/shared/utils';
+import { hiddenSyntaxModeExtension } from './src/hiddenSyntax/mode';
 import { enableWysiwyg, disableWysiwyg, isWysiwyg } from './src/wysiwyg';
 import { sourceExtensions } from './src/sourceToolbar';
 import { installUnifiedToolbar } from './src/unifiedToolbar';
@@ -50,19 +50,7 @@ if (window.__markeditPreviewInitialized__) {
   if (hasFullHost()) {
     // onAppReady is ensured to be called once per app lifecycle
     if (typeof MarkEdit.onAppReady === 'function') {
-      MarkEdit.onAppReady(() => {
-        copyToSharedContainer();
-        setTimeout(() => void checkForUpdates(), 2000);
-        void checkForkUpstream();
-      });
-    } else {
-      // No onAppReady: this runs on every document load, so throttle it
-      setTimeout(() => void checkForUpdatesThrottled(), 4000);
-    }
-
-    if (updateBehavior === 'automatic' || updateBehavior === 'quiet') {
-      // Checks for updates every 7 days when in automatic or quiet mode
-      setInterval(() => void checkForUpdates(), 604800000);
+      MarkEdit.onAppReady(copyToSharedContainer);
     }
   } else {
     // Minimal UI for lite hosts, like the preview extension
@@ -92,10 +80,7 @@ if (hasFullHost()) {
     children: [
       {
         title: localized('changeMode'),
-        action: () => {
-          changeViewMode();
-          renderDecorationViews();
-        },
+        action: changeViewMode,
         key: (keyboardShortcut['key'] ?? 'V') as string,
         modifiers: (keyboardShortcut['modifiers'] ?? ['Command']) as MenuItem['modifiers'],
       },
@@ -103,6 +88,7 @@ if (hasFullHost()) {
       createModeItem(localized('editMode'), ViewMode.edit),
       createModeItem(localized('sideBySideMode'), ViewMode.sideBySide),
       createModeItem(localized('previewMode'), ViewMode.preview),
+      createModeItem(localized('syntaxHiddenMode'), ViewMode.syntaxHidden),
       { separator: true },
       ...createHtmlItems(),
       { separator: true },
@@ -117,42 +103,30 @@ if (hasFullHost()) {
         title: `${localized('version')} ${__PKG_VERSION__}`,
         action: () => open(`https://github.com/MarkEdit-app/MarkEdit-preview/releases/tag/v${__PKG_VERSION__}`),
       },
-      {
-        title: `${localized('checkReleases')} (GitHub)`,
-        action: () => open('https://github.com/MarkEdit-app/MarkEdit-preview/releases/latest'),
-      },
-      ...(hasFilePathInfo() ? [{
-        title: localized('updateAndRelaunch'),
-        action: async () => {
-          const release = await fetchLatestRelease();
-          if (await downloadLatestBuild(release.tag_name)) {
-            MarkEdit.relaunchApp();
-          } else {
-            MarkEdit.showAlert(localized('failedToUpdate'));
-          }
-        },
-      }] : []),
     ],
   });
 
   MarkEdit.addExtension(sourceExtensions());
   installUnifiedToolbar();
 
-  MarkEdit.addExtension(EditorView.updateListener.of(update => {
-    if (!update.docChanged) {
-      return;
-    }
+  MarkEdit.addExtension([
+    EditorView.updateListener.of(update => {
+      if (!update.docChanged) {
+        return;
+      }
 
-    if (update.transactions.every(tr => tr.annotation(silentChange))) {
-      return;
-    }
+      if (update.transactions.every(tr => tr.annotation(silentChange))) {
+        return;
+      }
 
-    if (states.renderUpdater !== undefined) {
-      clearTimeout(states.renderUpdater);
-    }
+      if (states.renderUpdater !== undefined) {
+        clearTimeout(states.renderUpdater);
+      }
 
-    states.renderUpdater = setTimeout(renderHtmlPreview, 500);
-  }));
+      states.renderUpdater = setTimeout(renderHtmlPreview, 500);
+    }),
+    hiddenSyntaxModeExtension,
+  ]);
 
   MarkEdit.onEditorReady(() => {
     if (imageHoverPreview) {
@@ -173,7 +147,6 @@ if (hasFullHost()) {
     });
 
     renderHtmlPreview();
-    renderDecorationViews();
     startObserving(getEditPane(), getPreviewPane());
     // Auto-enable WYSIWYG by default
     enableWysiwyg();
@@ -185,6 +158,15 @@ if (hasFullHost()) {
     states.keyDownListener = event => handlePageZoom(event);
     document.addEventListener('keydown', states.keyDownListener);
   });
+
+  // Handle lineHeight change, which doesn't trigger a CodeMirror update
+  if (typeof MarkEdit.onEditorConfigChange === 'function') {
+    MarkEdit.onEditorConfigChange(key => {
+      if (key === 'lineHeight' && currentViewMode() === ViewMode.syntaxHidden) {
+        MarkEdit.editorView?.requestMeasure();
+      }
+    });
+  }
 }
 
 function toggleWysiwyg() {
@@ -202,10 +184,7 @@ function toggleWysiwyg() {
 function createModeItem(title: string, mode: ViewMode): MenuItem {
   return {
     title,
-    action: () => {
-      setViewMode(mode);
-      renderDecorationViews();
-    },
+    action: () => setViewMode(mode),
     // state requires MarkEdit 1.24.0+
     state: () => ({ isSelected: currentViewMode() === mode }),
   };
@@ -243,38 +222,6 @@ function createHtmlItems(): MenuItem[] {
     },
     ...copyItems,
   ];
-}
-
-function renderDecorationViews() {
-  const updatePill = renderUpdatePill();
-  if (updatePill !== undefined) {
-    updatePill.style.display = currentViewMode() === ViewMode.edit ? 'none' : '';
-  }
-}
-
-// ── Upstream fork-update check ─────────────────────────────────────────────
-// The fork bumped the version to prevent auto-update from overwriting our
-// customizations. This separate check watches the REAL upstream for new
-// releases and alerts Louis to merge + rebuild via update.sh.
-const FORK_UPSTREAM_BASE = '1.8.0'; // last upstream version merged into fork
-
-async function checkForkUpstream(): Promise<void> {
-  try {
-    const res = await fetch('https://api.github.com/repos/MarkEdit-app/MarkEdit-preview/releases/latest');
-    if (!res.ok) { return; }
-    const data = await res.json() as { tag_name: string };
-    const upstream = data.tag_name.replace(/^v/, '');
-    const notifiedKey = `fork-upstream-notified-${upstream}`;
-    // Only alert once per upstream version
-    if (upstream > FORK_UPSTREAM_BASE && localStorage.getItem(notifiedKey) === null) {
-      localStorage.setItem(notifiedKey, '1');
-      await MarkEdit.showAlert({
-        title: `Upstream MarkEdit-preview ${upstream} Available`,
-        message: `The upstream shipped v${upstream}. Say "update markedit" in Cowork or run:\n  cd ~/Developer/markedit-preview && bash update.sh`,
-        buttons: ['Got it'],
-      });
-    }
-  } catch { /* ignore network errors */ }
 }
 
 const states: {

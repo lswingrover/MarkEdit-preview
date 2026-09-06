@@ -5,10 +5,6 @@ export function macOSTahoe() {
   return match === null ? false : parseInt(match[1]) >= 26;
 }
 
-export function hasFilePathInfo() {
-  return typeof __FILE_PATH__ === 'string';
-}
-
 export function appendStyle(css: string, enabled = true) {
   const style = document.createElement('style');
   style.textContent = css;
@@ -108,5 +104,26 @@ export async function parseJSON(path: string): Promise<Record<string, unknown>> 
   } catch (error) {
     console.error(`Failed to parse JSON from ${path}:`, error);
     return {};
+  }
+}
+
+export function writeClipboard(item: ClipboardItem, failedToCopyMessage: string) {
+  // Deliberately keep clipboard.write synchronous for #174
+  return navigator.clipboard.write([item]).catch(error => {
+    console.error('Failed to copy:', error);
+    MarkEdit.showAlert(failedToCopyMessage);
+  });
+}
+
+export function htmlToPlainText(html: string) {
+  const element = document.createElement('div');
+  element.style.cssText = 'position: fixed; left: -10000px; top: 0;';
+  element.innerHTML = html;
+  document.body.appendChild(element);
+
+  try {
+    return element.innerText;
+  } finally {
+    element.remove();
   }
 }

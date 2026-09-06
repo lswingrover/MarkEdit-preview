@@ -1,14 +1,16 @@
 import { Annotation } from '@codemirror/state';
 import { MarkEdit } from 'markedit-api';
-import { appendStyle, getBlockRange, getFileExtension, getFileName, joinPaths, selectFullRange } from './shared/utils';
+import { appendStyle, getBlockRange, getFileExtension, getFileName, joinPaths, selectFullRange, writeClipboard, htmlToPlainText } from './shared/utils';
 import { renderMarkdown, renderMermaid, renderKatex, handlePostRender, applyStyles } from './render';
 import { replaceImageURLs } from './features/image';
-import { hidePreviewButtons, previewModes } from './support/settings';
+import { hidePreviewButtons, viewModes } from './support/settings';
 import { localized } from './shared/strings';
 import { syncScrollProgress, invalidateBlockCache, warmBlockCache } from './scroll';
 import { resolveTaskToggle } from './features/task';
 import { isWysiwyg } from './wysiwyg';
+import { handlePreviewLinkClick } from './features/navigation';
 import { ClassNames, CacheKeys } from './shared/const';
+import { setHiddenSyntaxMode } from './hiddenSyntax/mode';
 
 import Split from 'split-grid';
 import type { SplitInstance as Splitter } from 'split-grid';
@@ -35,6 +37,7 @@ export enum ViewMode {
   edit,
   sideBySide,
   preview,
+  syntaxHidden,
 }
 
 export function setUp() {
@@ -106,7 +109,10 @@ export function setUp() {
     previewPane.addEventListener('click', handleExternalFiles);
   }
 
-  previewPane.addEventListener('click', handleTaskItemToggle);
+  previewPane.addEventListener('click', event => {
+    handleAnchorClick(event);
+    handleTaskItemToggle(event);
+  });
 }
 
 export function setViewMode(mode: ViewMode, needsDisplay = true) {
@@ -121,7 +127,9 @@ export function setViewMode(mode: ViewMode, needsDisplay = true) {
   }
 
   const editorView = MarkEdit.editorView;
-  if (mode === ViewMode.edit) {
+  setHiddenSyntaxMode(editorView, mode === ViewMode.syntaxHidden);
+
+  if (isEditorOnlyMode()) {
     // Don't call contentDOM.focus() here, it scrolls to the top
     editorView.focus();
   } else if (mode === ViewMode.preview) {
@@ -155,19 +163,20 @@ export function setViewMode(mode: ViewMode, needsDisplay = true) {
 }
 
 export function changeViewMode() {
-  // Get the rotation of all modes, "edit" always goes first
-  const rotation = [
-    ViewMode.edit,
-    ...previewModes.map(mode => {
-      switch (mode) {
-        case 'side-by-side': return ViewMode.sideBySide;
-        case 'preview': return ViewMode.preview;
-        default: return undefined;
-      }
-    }).filter(mode => mode !== undefined),
-  ];
+  const configuredModes = viewModes.map(mode => {
+    switch (mode) {
+      case 'edit': return ViewMode.edit;
+      case 'side-by-side': return ViewMode.sideBySide;
+      case 'preview': return ViewMode.preview;
+      case 'syntax-hidden': return ViewMode.syntaxHidden;
+      default: return undefined;
+    }
+  }).filter(mode => mode !== undefined);
 
-  // When current mode is not found in the rotation, start over from "edit"
+  const canEdit = configuredModes.some(mode => mode === ViewMode.edit || mode === ViewMode.syntaxHidden);
+  const rotation = canEdit ? configuredModes : [ViewMode.edit, ...configuredModes];
+
+  // When current mode is not found, start at the beginning
   const currentIndex = rotation.indexOf(currentViewMode());
   const nextIndex = currentIndex === -1 ? 0 : ((currentIndex + 1) % rotation.length);
   setViewMode(rotation[nextIndex]);
@@ -181,6 +190,10 @@ export function restoreViewMode() {
 
   const newMode = Number(cachedValue);
   if (currentViewMode() === newMode) {
+    if (newMode === ViewMode.syntaxHidden) {
+      setHiddenSyntaxMode(MarkEdit.editorView, true);
+    }
+
     return;
   }
 
@@ -204,12 +217,17 @@ export function isWysiwygEditLocked(): boolean {
   return states.wysiwygEditLock;
 }
 
+export function isEditorOnlyMode() {
+  const mode = currentViewMode();
+  return mode === ViewMode.edit || mode === ViewMode.syntaxHidden;
+}
+
 export async function renderHtmlPreview() {
   // Suppress re-render while the user is editing in the WYSIWYG pane.
   if (states.wysiwygEditLock) {
     return;
   }
-  if (currentViewMode() === ViewMode.edit) {
+  if (isEditorOnlyMode()) {
     return;
   }
 
@@ -242,27 +260,33 @@ export async function renderHtmlPreview() {
 
     const pageZoom = localStorage.getItem(CacheKeys.previewPageZoomKey);
     if (pageZoom !== null) {
-      previewPane.style.zoom = pageZoom;
+      setPageZoom(pageZoom);
     }
   });
 }
 
 export function handlePageZoom(event: KeyboardEvent) {
-  if (currentViewMode() === ViewMode.edit || (currentViewMode() === ViewMode.sideBySide && MarkEdit.editorView.hasFocus)) {
+  if (isEditorOnlyMode() || (currentViewMode() === ViewMode.sideBySide && MarkEdit.editorView.hasFocus)) {
     return;
   }
 
-  if (!event.metaKey || event.ctrlKey || event.altKey || event.shiftKey) {
+  if (!event.metaKey || event.ctrlKey || event.altKey) {
+    return;
+  }
+
+  // Shift-Cmd-0 belongs to View > Actual Size
+  if (event.shiftKey && event.key === '0') {
     return;
   }
 
   const zoom = Number(previewPane.style.zoom) || 1.0;
   const clamp = (value: number) => String(Math.min(Math.max(value, 0.5), 3.0));
 
+  // Shifted forms are accepted too, menus advertise these shortcuts as `Cmd +` and `Cmd -`
   switch (event.key) {
-    case '-': previewPane.style.zoom = clamp(zoom - 0.1); break;
-    case '=': previewPane.style.zoom = clamp(zoom + 0.1); break;
-    case '0': previewPane.style.zoom = '1'; break;
+    case '-': case '_': setPageZoom(clamp(zoom - 0.1)); break;
+    case '=': case '+': setPageZoom(clamp(zoom + 0.1)); break;
+    case '0': setPageZoom('1'); break;
     default: return; // Ignores caching and event handling
   }
 
@@ -310,19 +334,23 @@ export function saveStyledHtml() {
   saveGeneratedHtml(true);
 }
 
-export async function copyHtml() {
-  const html = await getRenderedHtml(false);
-  await navigator.clipboard.writeText(html);
-}
-
-export async function copyRichText() {
-  const html = await getRenderedHtml(false);
+export function copyHtml() {
+  const html = getRenderedHtml(false);
   const items = new ClipboardItem({
-    'text/html': new Blob([html], { type: 'text/html' }),
-    'text/plain': new Blob([previewPane.innerText], { type: 'text/plain' }),
+    'text/plain': html.then(value => new Blob([value], { type: 'text/plain' })),
   });
 
-  await navigator.clipboard.write([items]);
+  return writeClipboard(items, localized('failedToCopy'));
+}
+
+export function copyRichText() {
+  const html = getRenderedHtml(false);
+  const items = new ClipboardItem({
+    'text/html': html.then(value => new Blob([value], { type: 'text/html' })),
+    'text/plain': html.then(value => new Blob([htmlToPlainText(value)], { type: 'text/plain' })),
+  });
+
+  return writeClipboard(items, localized('failedToCopy'));
 }
 
 export function getEditPane() {
@@ -379,6 +407,14 @@ function updateGutterStyle() {
   gutterView.style.background = `linear-gradient(to right, transparent 50%, ${backgroundColor} 50%)`;
 }
 
+function setPageZoom(value: string) {
+  previewPane.style.zoom = value;
+
+  // Zooming in narrows the layout width,
+  // mark it so that diagrams can opt out of shrinking.
+  previewPane.classList.toggle('zoomed-in', Number(value) > 1);
+}
+
 async function saveGeneratedHtml(styled: boolean) {
   const fileName = await (async () => {
     const info = await MarkEdit.getFileInfo();
@@ -423,6 +459,30 @@ async function handleExternalFiles(event: MouseEvent) {
   } catch (error) {
     console.error('Failed to open file:', error);
   }
+}
+
+/**
+ * Opening a link steals focus and leaves WebKit's link :hover state stale.
+ *
+ * Suppress the underline after a click until the pointer actually leaves.
+ */
+function handleAnchorClick(event: MouseEvent) {
+  const suppressor = 'suppress-underline';
+  const anchor = event.target instanceof Element ? event.target.closest('a') : null;
+  if (anchor !== null) {
+    handlePreviewLinkClick(previewPane, event);
+  }
+
+  if (anchor === null || anchor.classList.contains(suppressor) || !anchor.matches(':hover')) {
+    return;
+  }
+
+  anchor.classList.add(suppressor);
+  anchor.addEventListener(
+    'mouseleave',
+    () => anchor.classList.remove(suppressor),
+    { once: true },
+  );
 }
 
 function handleTaskItemToggle(event: MouseEvent) {
