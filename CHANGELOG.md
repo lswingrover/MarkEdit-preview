@@ -1,5 +1,17 @@
 # Changelog
 
+## [1.10.3] — 2026-09-06
+
+- ship: bootstrap Yarn Berry via corepack so ship.sh runs under the yarn@4 pin
+- deps: pin MarkEdit git deps over https (not ssh) so CI + public clones work
+- ci: enable Corepack so the runner uses the pinned Yarn 4
+
+Files changed in this ship:
+- M dist/lite/markedit-preview.js
+- M dist/markedit-preview.js
+- M package.json
+- M ship.sh
+
 ## [1.10.2] — 2026-09-03
 
 - chore(deps): clear all open Dependabot advisories — mermaid 11.17.2, js-yaml 4.3.2, dompurify 3.4.14, linkify-it 5.0.2, postcss 8.5.28, brace-expansion 1.1.18/5.0.9, esbuild 0.28.2

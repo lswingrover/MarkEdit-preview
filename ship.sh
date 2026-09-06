@@ -50,6 +50,7 @@ if ! yarn --version >/dev/null 2>&1 || [ "$(yarn --version 2>/dev/null | cut -d.
   done
   if [ -n "$COREPACK" ]; then
     CP_SHIM="$(mktemp -d)"
+    trap 'rm -rf "$CP_SHIM"' EXIT   # don't leave a corepack shim dir behind per run
     "$COREPACK" enable --install-directory "$CP_SHIM" yarn >/dev/null 2>&1 || true
     export PATH="$CP_SHIM:$PATH"
   fi
