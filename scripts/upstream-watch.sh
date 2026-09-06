@@ -119,11 +119,33 @@ if [ "$MERGE_RC" -eq 0 ]; then
   # ── clean merge → prove it still builds ──────────────────────────────────────
   log "merge is CLEAN — building to verify"
 
-  # The worktree needs node_modules to build. Symlink the main checkout's rather
-  # than install: `vite build` only READS node_modules, so this never mutates the
-  # real one, and it's instant. If upstream changed dependencies, the build fails
-  # loudly below and we report "needs you" — the correct outcome for a dep change.
-  [ -e "$WORKTREE/node_modules" ] || ln -s "$REPO/node_modules" "$WORKTREE/node_modules"
+  # Yarn Berry bootstrap (same mechanism as ship.sh — keep the two in step). This is a
+  # Berry project (package.json packageManager: yarn@4.x); the ambient `yarn` is Volta's
+  # classic 1.x, which REFUSES to run against the pin. corepack ships with node but Volta
+  # doesn't expose it, so find it in the active node image and put its Berry shim first
+  # on PATH for the install + build only.
+  CP_SHIM=""; COREPACK=""
+  for c in "$(command -v corepack 2>/dev/null)" \
+           "$HOME/.volta/tools/image/node/$(node -v 2>/dev/null | tr -d v)/bin/corepack" \
+           $(ls -t "$HOME"/.volta/tools/image/node/*/bin/corepack 2>/dev/null); do
+    [ -n "$c" ] && [ -x "$c" ] && { COREPACK="$c"; break; }
+  done
+  if [ -n "$COREPACK" ]; then
+    CP_SHIM="$(mktemp -d)"
+    "$COREPACK" enable --install-directory "$CP_SHIM" yarn >/dev/null 2>&1 || true
+  fi
+  BERRY_PATH="${CP_SHIM:+$CP_SHIM:}$PATH"
+
+  # The worktree needs node_modules that match the MERGED lockfile. Do NOT symlink the
+  # main checkout's: that tree was installed for the old lockfile, and vite will happily
+  # bundle upstream's new source against old deps and report success (2026-09-06: a
+  # 5.33 MB stale-dep bundle vs the correct 5.07 MB). A real Berry install here is ~10s
+  # from the shared cache and never mutates the main checkout. --immutable refuses if
+  # the merged lockfile is inconsistent, which is a real "needs you" signal.
+  set +e
+  ( cd "$WORKTREE" && PATH="$BERRY_PATH" yarn install --immutable ) >"$BUILD_LOG" 2>&1
+  INSTALL_RC=$?
+  set -e
 
   # `yarn build` deploys to the live Shared script mid-build (hardcoded to the OS
   # home dir — not redirectable via $HOME) and then deletes it. Back up the live
@@ -136,9 +158,14 @@ if [ "$MERGE_RC" -eq 0 ]; then
   fi
 
   set +e
-  ( cd "$WORKTREE" && yarn build ) >"$BUILD_LOG" 2>&1
-  BUILD_RC=$?
+  if [ "$INSTALL_RC" -eq 0 ]; then
+    ( cd "$WORKTREE" && PATH="$BERRY_PATH" yarn build ) >>"$BUILD_LOG" 2>&1
+    BUILD_RC=$?
+  else
+    BUILD_RC=$INSTALL_RC
+  fi
   set -e
+  [ -n "$CP_SHIM" ] && rm -rf "$CP_SHIM"
 
   if [ -n "$SHARED_BACKUP" ]; then
     cp "$SHARED_BACKUP" "$SHARED"       # restore the live script exactly

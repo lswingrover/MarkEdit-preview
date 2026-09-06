@@ -1,5 +1,11 @@
 # Changelog
 
+## [1.11.2] — 2026-09-06
+
+- fix: **rebuild against the merged dependencies.** v1.11.1's bundle was built in a checkout whose node_modules still held the pre-merge deps (markedit-api 0.26, katex 0.17, js-yaml 4, markedit-katex 1.1.5), so upstream's new source was bundled against old libraries (5.33 MB). This build uses the lockfile's deps (markedit-api 0.35, katex 0.18, js-yaml 5, markedit-katex 1.1.6 + patch): 5.07 MB, lint clean, 322/322 tests
+- ship.sh: run `yarn install --immutable` before every build, so node_modules always matches yarn.lock and drift fails loudly instead of shipping a stale-dep bundle
+- upstream-watch.sh: Yarn Berry bootstrap via corepack (classic yarn refuses under the packageManager pin), and a real `yarn install --immutable` in the sync worktree instead of symlinking main's node_modules (which produces exactly this stale-dep build on any dep change)
+
 ## [1.11.1] — 2026-09-06
 
 - merge: upstream MarkEdit-preview **1.11.0** (40 commits) — hidden-syntax mode, caret/ligature fixes, reorganized tests; deps: markedit-api 0.35, markedit-vite 0.5, markedit-katex 1.1.6, js-yaml 5, katex 0.18

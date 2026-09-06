@@ -124,6 +124,18 @@ else
   VERSION="$CURRENT_VERSION"
 fi
 
+# ── 1.5 Sync node_modules to the lockfile ──────────────────────────────────────
+# A ship must build against exactly the committed lockfile. After an upstream land
+# (package.json + yarn.lock changed) node_modules is stale, and vite will happily
+# bundle new source against old deps and report success — 2026-09-06 v1.11.1 went
+# out that way (5.33 MB stale-dep bundle vs the correct 5.07 MB). --immutable also
+# refuses if the lockfile would change, so lockfile/manifest drift fails loudly.
+echo "📦 yarn install --immutable (node_modules must match yarn.lock)..."
+if ! yarn install --immutable >/dev/null 2>&1; then
+  echo "❌ yarn install --immutable failed — node_modules/lockfile drift. Run 'yarn install', commit yarn.lock if it changed, and retry." >&2
+  exit 1
+fi
+
 # ── 2. Build ───────────────────────────────────────────────────────────────────
 echo ""
 echo "🚀 Building markedit-preview v${VERSION}..."
