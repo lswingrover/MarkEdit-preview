@@ -1,5 +1,13 @@
 # Changelog
 
+## [1.11.1] — 2026-09-06
+
+- merge: upstream MarkEdit-preview **1.11.0** (40 commits) — hidden-syntax mode, caret/ligature fixes, reorganized tests; deps: markedit-api 0.35, markedit-vite 0.5, markedit-katex 1.1.6, js-yaml 5, katex 0.18
+- fork features preserved: WYSIWYG, lock-step scroll sync, math/mermaid toolbar, Quick Look shim (now also stubs `Direction`, which upstream's hidden-syntax components read at module scope — caught by the fork's shim-coverage test), unified/source toolbars, print-rendered
+- removed: the fork's in-extension update checks and the hardcoded upstream-release alert — upstream dropped its own updater (the host app owns updates now) and the watch-and-land flow supersedes the alert
+- version 1.11.1: kept above upstream 1.11.0 so the host never auto-replaces the fork bundle
+- verified: lint clean, 322/322 tests, full build with all features
+
 ## [1.10.3] — 2026-09-06
 
 - ship: bootstrap Yarn Berry via corepack so ship.sh runs under the yarn@4 pin
