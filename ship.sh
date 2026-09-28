@@ -245,7 +245,7 @@ echo "✅  Build complete — deployed to MarkEdit scripts folder"
 if $DO_PUSH; then
   echo ""
   echo "📝 Changelog..."
-  CHANGELOG_NOTES=$(python3 ~/Developer/scotty/scripts/changelog.py --repo . --version "$VERSION")
+  CHANGELOG_NOTES=$(python3 "${SCOTTY_DEV_ROOT:-$HOME/Developer}/scotty/scripts/changelog.py" --repo . --version "$VERSION")
   echo "$CHANGELOG_NOTES" | sed 's/^/  /'
 fi
 
