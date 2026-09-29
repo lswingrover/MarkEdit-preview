@@ -66,9 +66,11 @@ trap 'rc=$?; rmdir "$LOCKDIR" 2>/dev/null || true; if [ $rc -ne 0 ]; then log "E
 
 cd "$REPO"
 
-# ── 1. fetch upstream (network failure is a quiet skip, not an alarm) ───────────
+# ── 1. fetch upstream (any fetch failure is a quiet skip, not an alarm) ─────────
+# Cause unknown from here — could be offline, could be auth, could be GitHub down.
+# The stderr just above this line in the log has the real reason; don't guess one.
 if ! git fetch upstream -q 2>>"$WATCH_LOG"; then
-  log "git fetch upstream failed (offline?) — quiet skip"
+  log "git fetch upstream failed — quiet skip (see stderr just above for the actual cause)"
   exit 0
 fi
 
