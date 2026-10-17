@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # upstream-watch.sh — watch upstream MarkEdit-preview, prepare a vetted merge, notify.
 #
-# Run unattended by launchd (see scripts/com.lou.markedit-upstream-watch.plist).
+# Run unattended by launchd (the job is installed by scripts/install-upstream-watch.sh).
 # It NEVER touches your main checkout's HEAD, NEVER deploys to the live MarkEdit
 # script, and NEVER lands anything. All it does is:
 #
