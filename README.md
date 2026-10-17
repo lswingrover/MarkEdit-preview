@@ -4,7 +4,7 @@ A downstream fork of [MarkEdit-app/MarkEdit-preview](https://github.com/MarkEdit
 
 - **Lock-step scroll sync** — editor and preview track each other in real time, every animation frame, using RAF. No lag, no post-scroll drift. Upstream uses `scrollend` (fires after momentum stops); this fires on every `scroll` event.
 - **WYSIWYG editing** — the preview pane becomes directly editable with a sticky formatting toolbar. Edits convert back to Markdown via Turndown (GFM-aware) and sync to the CodeMirror source. Active by default.
-- **Print Rendered…** — prints the styled preview HTML (not raw Markdown) via the system print dialog. Available in the preview toolbar menu. Writes a temporary `~/.markedit-print.html` dotfile, opens it in the default browser, which shows the print dialog immediately on load and auto-closes the tab when done.
+- **Print Rendered…** — prints the styled preview HTML (not raw Markdown) via the system print dialog. Available under **Extensions → View Mode**. Writes a temporary `~/.markedit-print.html` dotfile, opens it in the default browser, which shows the print dialog immediately on load and auto-closes the tab when done.
 - **Quick Look opens rendered** — pressing Space on a `.md` file in Finder shows formatted markdown, not raw source. Upstream opens on source and remembers a toggle in `localStorage`; the Quick Look WebView has no persistent `localStorage`, so that toggle never sticks.
 
 These are deliberate upstream non-features, not oversights. This fork exists for users who want them anyway.
@@ -18,15 +18,17 @@ These are deliberate upstream non-features, not oversights. This fork exists for
 | | Upstream | This fork |
 |---|---|---|
 | Trigger | `scrollend` (after momentum stops) | `scroll` + `requestAnimationFrame` (every frame) |
-| Direction | Editor → Preview only | Editor → Preview only |
-| Performance | O(n) querySelectorAll per event | Pre-computed `BlockEntry` index; zero DOM reads during scroll |
-| Gap handling | None | Interpolates across blank lines and non-block content |
+| Direction | Editor → Preview only | Both ways: editor → preview and preview → editor |
+| Performance | O(n) `querySelectorAll` + `getBoundingClientRect` per event | Editor → preview reads CodeMirror's own block metrics and binary-searches the target block (one `querySelectorAll` per event remains); preview → editor binary-searches a pre-computed `BlockEntry` index with no per-event DOM query |
+| Gap handling | Interpolates across blank lines and non-block content | Same (kept from upstream) |
 
-**Block cache:** `[data-line-from]` elements are indexed once after each render — line ranges, top offsets, and heights pre-computed. The cache is invalidated and rebuilt via `MutationObserver` after every `renderHtmlPreview()` call.
+**Block cache:** `[data-line-from]` elements are indexed once per render — line ranges and top offsets are pre-computed (heights are still read live). Only the preview → editor direction uses it. `invalidateBlockCache()` runs after every `renderHtmlPreview()` and whenever WYSIWYG toggles (the toolbar shifts block offsets); the index is rebuilt in the next animation frame by `warmBlockCache()`.
 
-### Print Rendered'''...
+A short-lived lock keeps the two directions from echoing each other: a programmatic scroll on one pane is ignored by the other pane's listener for 150 ms. Editor-driven sync is also skipped during the 600 ms WYSIWYG edit lock (see [WYSIWYG editing](#wysiwyg-editing)).
 
-**Toolbar menu:** Extensions → (preview toolbar) → Print Rendered'''...
+### Print Rendered…
+
+**Menu:** Extensions → View Mode → Print Rendered…
 
 Generates the same styled HTML as *Save Styled HTML* but instead of saving a file, it:
 
@@ -109,7 +111,8 @@ Toggling **Extensions → View Mode → WYSIWYG Editing** shows/hides the toolba
 git clone git@github.com:lswingrover/MarkEdit-preview.git
 cd MarkEdit-preview
 
-# 2. Install dependencies
+# 2. Install dependencies (Yarn 4 via Corepack — classic Yarn 1.x can't install this dependency set)
+corepack enable
 yarn install
 
 # 3. Build (full — includes KaTeX + Mermaid)
@@ -123,7 +126,7 @@ cp dist/markedit-preview.js \
 osascript -e 'quit app "MarkEdit"' -e 'delay 1' -e 'launch app "MarkEdit"'
 ```
 
-> **Note:** there are two build variants and **the full build is the one that ships here.** `yarn build` produces `dist/markedit-preview.js` (~5.0 MB) with KaTeX and Mermaid; `yarn build:lite` produces `dist/lite/markedit-preview.js` (~315 KB) without them. Both include all core markdown features plus scroll sync, WYSIWYG, and Quick Look.
+> **Note:** there are two build variants and **the full build is the one that ships here.** `yarn build` produces `dist/markedit-preview.js` (~5.0 MB) with KaTeX and Mermaid; `yarn build:lite` produces `dist/lite/markedit-preview.js` (~350 KB) without them. Both include all core markdown features plus scroll sync, WYSIWYG, and Quick Look.
 >
 > An earlier version of this note claimed the lite build was *required* because of a broken `markedit-katex` install (`src/index.ts` missing). That's no longer true — `vite.config.mts` carries an alias resolving `markedit-katex` straight to its TypeScript source, and the full build completes cleanly. Prefer `yarn build` unless you specifically want the smaller artifact.
 >
@@ -141,18 +144,12 @@ The version is pinned ahead of upstream to prevent MarkEdit's built-in auto-upda
 
 ## Updating when upstream ships
 
-The extension checks for upstream releases on every MarkEdit launch. When a new version is detected, a native alert appears once with update instructions.
+The extension no longer checks for upstream releases itself: upstream dropped its in-extension updater, and this fork's own update alert was removed in 1.11.1. Syncing is a watch-and-land flow driven by scripts in this repo:
 
-To update manually:
+1. `bash scripts/install-upstream-watch.sh` installs a daily launchd job that runs `scripts/upstream-watch.sh`. It fetches `upstream`; if there is anything new, it attempts the merge in a sibling worktree (`<checkout>-wt-upstream-sync`, branch `upstream-sync`), builds the full variant when the merge is clean, and posts a notification. It never touches your main checkout, never deploys, and never lands anything. Because this fork changes many of the same files as upstream, conflicts are the common case (most likely in `src/scroll.ts` or `main.ts`); they are left staged in that worktree for you to resolve.
+2. `bash scripts/upstream-land.sh` fast-forwards `main` to the vetted merge and stops there. Deploy, version bump, tag, and push are a separate `ship.sh` step (see [Fork maintenance](#fork-maintenance)).
 
-```bash
-cd ~/Developer/MarkEdit-preview
-bash update.sh
-```
-
-`update.sh` does the full cycle: `git fetch upstream` → merge → `LITE_BUILD=true yarn vite build` → copy to scripts folder → restart MarkEdit.
-
-If the merge has conflicts (most likely in `src/scroll.ts` or `main.ts`), resolve them, then continue with `git merge --continue` before running the build step.
+`update.sh` is the manual escape hatch: it merges `upstream/main` straight into your current checkout, runs the full `yarn build`, copies the result to the scripts folder, and restarts MarkEdit. It has no conflict vetting and no build gate, so prefer the flow above.
 
 ---
 
@@ -162,7 +159,7 @@ If the merge has conflicts (most likely in `src/scroll.ts` or `main.ts`), resolv
 MarkEdit.app (native Swift/AppKit)
 └── WKWebView
     └── markedit-preview.js            ← this fork, loaded from scripts folder
-        ├── main.ts                    ← entry: onEditorReady, menu items, update check
+        ├── main.ts                    ← entry: onEditorReady, menu items
         ├── src/view.ts                ← layout: previewPane div, view modes, render
         ├── src/scroll.ts              ← BlockEntry index, RAF sync, startObserving()
         ├── src/wysiwyg.ts             ← contentEditable, Turndown sync, edit lock
@@ -180,7 +177,7 @@ MarkEdit.app (native Swift/AppKit)
         └── src/shared/pickerPopover.ts ← reusable anchored popover: Escape/outside-click/Cancel all resolve undefined
 ```
 
-`startObserving(editorPane, previewPane)` is called in `onEditorReady`. It adds a `scroll` listener (passive) to `MarkEdit.editorView.scrollDOM`. On each scroll event, a RAF callback calls `syncScrollProgress()` which maps the editor's CodeMirror line position to a preview scroll position using the pre-built `BlockEntry` index.
+`startObserving(editorPane, previewPane)` is called in `onEditorReady`. It adds a passive `scroll` listener to each pane. On each scroll event, a RAF callback syncs the other pane: editor → preview via `syncScrollProgress()`, which maps the editor's CodeMirror line position to a preview scroll position; preview → editor via `syncPreviewToEditor()`, which binary-searches the pre-built `BlockEntry` index for the block at the top of the preview and scrolls the editor to the matching line.
 
 ---
 
@@ -190,7 +187,7 @@ MarkEdit.app (native Swift/AppKit)
 
 | File | Change |
 |------|--------|
-| `main.ts` | Auto-enable WYSIWYG; `checkForkUpstream()` update alert; Print Rendered menu item |
+| `main.ts` | Auto-enable WYSIWYG; WYSIWYG Editing toggle and Print Rendered menu items; installs the unified and source toolbars |
 | `src/view.ts` | `printRendered()` — writes styled HTML dotfile + opens browser to print |
 | `src/shared/strings.ts` | `printRendered` locale strings (EN / zh-Hans / zh-Hant) |
 | `src/scroll.ts` | RAF-based `startObserving()`; `BlockEntry` cache with `warmBlockCache()` / `invalidateBlockCache()` |
@@ -198,7 +195,7 @@ MarkEdit.app (native Swift/AppKit)
 | `src/unifiedToolbar.ts` | The one toolbar's DOM + focus-based routing between source/preview actions (new file) |
 | `src/toolbar.ts` | Preview-pane actions (execCommand/DOM), no toolbar DOM of its own (new file); preview-pane keyboard shortcut listener |
 | `src/sourceToolbar.ts` | Source-pane actions (CodeMirror transactions), no toolbar DOM of its own; always-on `keymap`; empty `showPanel` spacer sized to the unified toolbar's height (new file). **Its module-scope `Compartment`/`Prec` usage is why `src/quicklook/shim.ts` must stay complete** |
-| `src/quicklook/shim.ts` | Stubs every runtime import from the shimmed modules — `Compartment`, `Prec`, `keymap`, `showPanel`, `EditorSelection` — not just the ones Quick Look uses. Guarded by `tests/quicklook.shim.test.ts` |
+| `src/quicklook/shim.ts` | Stubs every runtime import from the shimmed modules — `Compartment`, `Prec`, `keymap`, `showPanel`, `EditorSelection`, and upstream's `Direction` — not just the ones Quick Look uses. Guarded by `tests/quicklook.shim.test.ts` |
 | `src/quicklook/mode.ts` | Quick Look defaults to `'preview'` instead of upstream's `'source'`; only an explicit stored `'source'` opts out |
 | `src/sourceFormat.ts` | Pure Markdown-text transaction functions for the source pane (new file, unit tested in `tests/sourceFormat.test.ts`) |
 | `src/toolbarUI.ts` | Shared toolbar button DOM builder (new file) |
@@ -206,15 +203,18 @@ MarkEdit.app (native Swift/AppKit)
 | `src/shared/alertPicker.ts` | Shared alert-type picker — renders each type's real appearance via the reused `.markdown-alert-*` classes (new file) |
 | `src/shared/pickerPopover.ts` | Reusable anchored popover: Escape/outside-click/explicit Cancel all resolve `undefined` (new file) |
 | `src/view.ts` (again) | `appendStyle(alertsCss())` — theme-independent alert styling was never applied to the live document at all before this (only to the standalone HTML export path); needed so alerts render correctly under non-`github` preview themes, and so the alert picker's popover preview (outside `.markdown-body`) has any alert styling to pick up |
-| `package.json` | Version bumped to `1.9.0` |
-| `vite.config.mts` | `markedit-katex` alias for Yarn 1 + Vite 7 compat; `emptyOutDir: false` — full/lite builds share `dist/`, and Vite's default cleanup would otherwise wipe one build's tracked output whenever the other mode runs |
+| `styles/toolbar.css`, `styles/picker.css` | Styling for the unified toolbar and the popover pickers (new files) |
+| `package.json` | Version kept ahead of upstream (currently `1.11.2`) so the host never replaces the fork with an upstream build; pins Yarn 4 via `packageManager` |
+| `vite.config.mts` | `markedit-katex` alias (Vite 7 can't resolve the package's `exports` map); `emptyOutDir: false` — full/lite builds share `dist/`, and Vite's default cleanup would otherwise wipe one build's tracked output whenever the other mode runs |
 
-**Upstream remote** is wired as `upstream`. Pull updates with:
+**Upstream remote** is wired as `upstream`. The [watch-and-land flow](#updating-when-upstream-ships) is the normal path; the by-hand equivalent is:
 
 ```bash
 git fetch upstream
 git merge upstream/main
 ```
+
+**Shipping:** `ship.sh` builds the full variant by default (`--lite` opts in to the stripped build), deploys it to the MarkEdit scripts folder, and restarts MarkEdit; with `--push` it also bumps the version, commits, tags, and pushes. It warns loudly when a ship would switch the deployed build variant. It refuses to run unless `MARKEDIT_SHIP_DIRECT=1` is set, a guard so shipping goes through the maintainer's own tooling by default.
 
 The scroll, WYSIWYG, and toolbar changes are isolated to the files above (all new files, or narrowly-scoped edits to `main.ts`/`wysiwyg.ts`) and are unlikely to conflict with most upstream changes.
 
@@ -225,13 +225,13 @@ The scroll, WYSIWYG, and toolbar changes are isolated to the files above (all ne
 ## Requirements
 
 - [MarkEdit](https://github.com/MarkEdit-app/MarkEdit) 1.24.0+
-- Node.js, Yarn 1.x
+- Node.js, and Yarn 4 via Corepack (pinned by `packageManager` in `package.json`)
 - macOS (tested on Sonoma / Sequoia)
 
 ---
 
 ## Credits
 
-Built on top of [MarkEdit-app/MarkEdit-preview](https://github.com/MarkEdit-app/MarkEdit-preview) by [@cyanzhong](https://github.com/cyanzhong). All core markdown rendering, QuickLook, task lists, themes, and search are upstream's work.
+Built on top of [MarkEdit-app/MarkEdit-preview](https://github.com/MarkEdit-app/MarkEdit-preview) by [@cyanzhong](https://github.com/cyanzhong). All core markdown rendering, QuickLook, task lists, themes, search, and the Syntax Hidden view mode are upstream's work.
 
 Turndown + turndown-plugin-gfm handle HTML → Markdown conversion in WYSIWYG mode.
