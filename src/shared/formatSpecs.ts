@@ -43,7 +43,7 @@ export const TOOLBAR_BUTTONS: ToolbarSpec[] = [
   { id: 'image', label: '&#128247;', title: 'Insert image', shortcut: { domKey: 'k', cmKey: 'Mod-Shift-k', shift: true, display: '⇧⌘K' } },
   { id: 'hr', label: '&#8212;', title: 'Horizontal rule', shortcut: { domKey: '-', cmKey: 'Mod-Shift--', shift: true, display: '⇧⌘−' } },
   { id: 'sep4', label: '', title: '', isSep: true },
-  { id: 'alert', label: '&#9888;', title: 'Alert / callout (always inserts a NOTE — edit the word to change type)', shortcut: { domKey: 'a', cmKey: 'Mod-Alt-a', alt: true, display: '⌥⌘A' } },
+  { id: 'alert', label: '&#9888;', title: 'Alert / callout', shortcut: { domKey: 'a', cmKey: 'Mod-Alt-a', alt: true, display: '⌥⌘A' } },
   { id: 'footnote', label: '[^]', title: 'Insert footnote', shortcut: { domKey: 'f', cmKey: 'Mod-Alt-f', alt: true, display: '⌥⌘F' } },
   { id: 'sep5', label: '', title: '', isSep: true },
   // Menu buttons — these open a template picker rather than acting directly,
