@@ -146,10 +146,9 @@ The version is pinned ahead of upstream to prevent MarkEdit's built-in auto-upda
 
 The extension no longer checks for upstream releases itself: upstream dropped its in-extension updater, and this fork's own update alert was removed in 1.11.1. Syncing is a watch-and-land flow driven by scripts in this repo:
 
-1. `bash scripts/install-upstream-watch.sh` installs a daily launchd job that runs `scripts/upstream-watch.sh`. It fetches `upstream`; if there is anything new, it attempts the merge in a sibling worktree (`<checkout>-wt-upstream-sync`, branch `upstream-sync`), builds the full variant when the merge is clean, and posts a notification. It never touches your main checkout, never deploys, and never lands anything. Because this fork changes many of the same files as upstream, conflicts are the common case (most likely in `src/scroll.ts` or `main.ts`); they are left staged in that worktree for you to resolve.
-2. `bash scripts/upstream-land.sh` fast-forwards `main` to the vetted merge and stops there. Deploy, version bump, tag, and push are a separate `ship.sh` step (see [Fork maintenance](#fork-maintenance)).
+1. `bash scripts/install-upstream-watch.sh` installs a daily launchd job that runs `scripts/upstream-watch.sh`. It fetches `upstream`; if there is anything new, it attempts the merge in a sibling worktree (`<checkout>-wt-upstream-sync`, branch `upstream-sync`) and posts a notification listing the upstream changes, calling out files that run code at install or build time (`package.json`, `yarn.lock`, configs, `patches/`). It never runs `yarn install` or `yarn build`, never touches your main checkout, never deploys, and never lands anything: after a merge those steps run upstream-controlled code, so they wait until you have reviewed the diff and run them yourself in that worktree. Because this fork changes many of the same files as upstream, conflicts are the common case (most likely in `src/scroll.ts` or `main.ts`); they are left staged in that worktree for you to resolve.
+2. After reviewing and building in the worktree, `bash scripts/upstream-land.sh` fast-forwards `main` to the merge and stops there. Deploy, version bump, tag, and push are a separate `ship.sh` step (see [Fork maintenance](#fork-maintenance)).
 
-`update.sh` is the manual escape hatch: it merges `upstream/main` straight into your current checkout, runs the full `yarn build`, copies the result to the scripts folder, and restarts MarkEdit. It has no conflict vetting and no build gate, so prefer the flow above.
 
 ---
 

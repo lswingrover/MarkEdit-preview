@@ -1,12 +1,12 @@
 #!/usr/bin/env bash
 # upstream-land.sh — integrate the watcher's vetted upstream merge into main.
 #
-# Companion to upstream-watch.sh. The watcher prepares (and, for a clean merge,
-# builds) the upstream merge on branch `upstream-sync` in a sibling worktree.
+# Companion to upstream-watch.sh. The watcher prepares the upstream merge on
+# branch `upstream-sync` in a sibling worktree but never installs or builds it;
+# review the upstream diff and build there yourself before running this.
 # This script does the one reversible integration step: fast-forward `main` to
-# that vetted merge and clean up. It deliberately STOPS THERE and hands the
-# actual ship to the scotty:markedit-preview-ship skill — deploy/version/tag/push
-# stay behind that gate, per the ship-via-skill doctrine.
+# that merge and clean up. It deliberately STOPS THERE and leaves the actual
+# ship (deploy/version/tag/push) to the separate ship step (ship.sh).
 #
 # Refuses to run if:
 #   - the worktree merge is still in progress / has unresolved conflicts
@@ -75,8 +75,8 @@ UP_TAG="$(git describe --tags upstream/main 2>/dev/null || git rev-parse --short
 echo ""
 echo "✅ main now contains upstream ${UP_TAG}. Nothing has been deployed or pushed yet."
 echo ""
-echo "   Ship it with the ship skill (deploy + version + tag + push + reload):"
-echo "     invoke the scotty:markedit-preview-ship skill  (--full --reload)"
+echo "   Ship it with the ship step (deploy + version + tag + push + reload):"
+echo "     ship.sh via the maintainer's ship wrapper  (--full --reload)"
 echo ""
 echo "   Nothing is live until you ship. To undo this integration instead:"
 echo "     git reset --hard ${BEFORE}"

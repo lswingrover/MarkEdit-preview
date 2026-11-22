@@ -24,7 +24,7 @@ set -euo pipefail
 
 if [ -z "${MARKEDIT_SHIP_VIA_SKILL:-}" ] && [ -z "${MARKEDIT_SHIP_DIRECT:-}" ]; then
   echo "DOCTRINE VIOLATION: Do not call ship.sh directly."
-  echo "    Use: invoke the scotty:markedit-preview-ship Cowork skill"
+  echo "    Use the maintainer's ship wrapper, which sets MARKEDIT_SHIP_VIA_SKILL."
   echo "    To bypass: MARKEDIT_SHIP_DIRECT=1 bash ship.sh [args]"
   exit 1
 fi
@@ -94,6 +94,18 @@ if [ "$CURRENT_BRANCH" = "main" ]; then
 fi
 if $DO_PUSH && ! $ON_MAIN; then
   echo "⚠️  On branch '${CURRENT_BRANCH}', not main — shipping current HEAD as-is, no version bump."
+fi
+
+# A --push commits and publishes. Refuse if there are untracked (non-ignored)
+# files: they are not part of a ship and would otherwise risk being swept into
+# a public commit. Commit, delete, or ignore them first.
+if $DO_PUSH; then
+  UNTRACKED="$(git ls-files --others --exclude-standard)"
+  if [ -n "$UNTRACKED" ]; then
+    echo "❌ Untracked files present; refusing to --push. Commit, remove, or ignore them first:" >&2
+    printf '%s\n' "$UNTRACKED" | sed 's/^/    /' >&2
+    exit 1
+  fi
 fi
 
 # ── 1. Version ─────────────────────────────────────────────────────────────────
@@ -245,6 +257,7 @@ echo "✅  Build complete — deployed to MarkEdit scripts folder"
 if $DO_PUSH; then
   echo ""
   echo "📝 Changelog..."
+  # Changelog helper from the maintainer's release tooling checkout (optional).
   CHANGELOG_NOTES=$(python3 "${SCOTTY_DEV_ROOT:-$HOME/Developer}/scotty/scripts/changelog.py" --repo . --version "$VERSION")
   echo "$CHANGELOG_NOTES" | sed 's/^/  /'
 fi
@@ -253,11 +266,18 @@ fi
 if $DO_PUSH; then
   echo ""
   echo "📦 Committing and pushing v${VERSION}..."
-  git add -A
+  # Stage tracked changes only (version bump, changelog, rebuilt dist/). Untracked
+  # files were refused above, so nothing new can slip into a public commit.
+  git add -u
   git commit -m "ship markedit-preview v${VERSION}" 2>/dev/null || echo "  (nothing to commit)"
-  git tag -f "v${VERSION}" 2>/dev/null || true
+  # Never move an existing tag: published release tags are not rewritten.
+  if git rev-parse -q --verify "refs/tags/v${VERSION}" >/dev/null; then
+    echo "  ⚠️  tag v${VERSION} already exists; leaving it where it is"
+  else
+    git tag "v${VERSION}"
+  fi
   git push 2>/dev/null || echo "  (no remote configured)"
-  git push --tags --force 2>/dev/null || echo "  (tags: no remote)"
+  git push origin "refs/tags/v${VERSION}" 2>/dev/null || echo "  (tag push failed or no remote)"
   echo "✅  Pushed v${VERSION}"
 fi
 
