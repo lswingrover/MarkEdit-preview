@@ -106,6 +106,13 @@ if $DO_PUSH; then
     printf '%s\n' "$UNTRACKED" | sed 's/^/    /' >&2
     exit 1
   fi
+  # Likewise refuse uncommitted edits to tracked files: an unrelated or debug
+  # change would otherwise be built into dist/ and published under the ship.
+  if ! git diff --quiet HEAD --; then
+    echo "❌ Uncommitted changes to tracked files; refusing to --push. Commit or stash them first:" >&2
+    git diff --name-only HEAD -- | sed 's/^/    /' >&2
+    exit 1
+  fi
 fi
 
 # ── 1. Version ─────────────────────────────────────────────────────────────────
@@ -257,18 +264,26 @@ echo "✅  Build complete — deployed to MarkEdit scripts folder"
 if $DO_PUSH; then
   echo ""
   echo "📝 Changelog..."
-  # Changelog helper from the maintainer's release tooling checkout (optional).
-  CHANGELOG_NOTES=$(python3 "${SCOTTY_DEV_ROOT:-$HOME/Developer}/scotty/scripts/changelog.py" --repo . --version "$VERSION")
-  echo "$CHANGELOG_NOTES" | sed 's/^/  /'
+  # Optional external changelog helper. Set MARKEDIT_CHANGELOG_SCRIPT to the path
+  # of a script that accepts `--repo <dir> --version <X.Y.Z>` and updates
+  # CHANGELOG.md. When it is unset or missing, the ship continues without it.
+  CHANGELOG_SCRIPT="${MARKEDIT_CHANGELOG_SCRIPT:-}"
+  if [ -n "$CHANGELOG_SCRIPT" ] && [ -f "$CHANGELOG_SCRIPT" ]; then
+    CHANGELOG_NOTES=$(python3 "$CHANGELOG_SCRIPT" --repo . --version "$VERSION" || true)
+    echo "$CHANGELOG_NOTES" | sed 's/^/  /'
+  else
+    echo "  (no changelog helper configured; set MARKEDIT_CHANGELOG_SCRIPT to use one; skipping)"
+  fi
 fi
 
 # ── 6. Git commit + tag + push ─────────────────────────────────────────────────
 if $DO_PUSH; then
   echo ""
   echo "📦 Committing and pushing v${VERSION}..."
-  # Stage tracked changes only (version bump, changelog, rebuilt dist/). Untracked
-  # files were refused above, so nothing new can slip into a public commit.
-  git add -u
+  # Stage only the files a ship produces (version bump, changelog, rebuilt
+  # bundles). Other edits were refused above; naming the paths keeps anything
+  # else out of the public commit regardless.
+  git add -- package.json CHANGELOG.md dist/markedit-preview.js dist/lite/markedit-preview.js
   git commit -m "ship markedit-preview v${VERSION}" 2>/dev/null || echo "  (nothing to commit)"
   # Never move an existing tag: published release tags are not rewritten.
   if git rev-parse -q --verify "refs/tags/v${VERSION}" >/dev/null; then
