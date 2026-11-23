@@ -311,15 +311,21 @@ export async function printRendered(): Promise<void> {
 
   // Auto-print + self-close so the browser shows the system print dialog
   // immediately, under a CSP that blocks any script carried by the document.
-  const printHtml = buildPrintHtml(styledHtml, createNonce());
+  const nonce = createNonce();
+  const printHtml = buildPrintHtml(styledHtml, nonce);
+  const canDelete = typeof MarkEdit.deleteFile === 'function';
 
   // MarkEdit has home-relative-path.read-write: / entitlement — it can write
   // anywhere under the real home. The sandboxed home path contains the real
   // home as a prefix; strip the container suffix to recover it.
   // Write to a hidden dotfile so it never clutters the user's filesystem.
+  // Each print gets its own file so a second print within the cleanup window
+  // is not deleted by the first print's timer. Hosts without deleteFile reuse
+  // one fixed file instead, so prints there overwrite rather than accumulate.
   const sandboxedHome = MarkEdit.getDirectoryPath('home');
   const realHome = sandboxedHome.replace(/\/Library\/Containers\/[^/]+\/Data\/?$/, '');
-  const filePath = realHome + '/.markedit-print.html';
+  const fileName = canDelete ? `.markedit-print-${nonce}.html` : '.markedit-print.html';
+  const filePath = `${realHome}/${fileName}`;
 
   const wrote = await MarkEdit.createFile({ path: filePath, string: printHtml, overwrites: true });
   if (!wrote) {
@@ -331,10 +337,12 @@ export async function printRendered(): Promise<void> {
 
   // Don't leave a plaintext copy of the document behind. The browser has the
   // page in memory well before this fires.
-  if (typeof MarkEdit.deleteFile === 'function') {
+  if (canDelete) {
     setTimeout(() => {
       MarkEdit.deleteFile(filePath).catch(() => undefined);
     }, printFileLifetimeMs);
+  } else {
+    console.warn(`MarkEdit.deleteFile is unavailable; the print page stays at ${filePath} until the next print overwrites it.`);
   }
 }
 

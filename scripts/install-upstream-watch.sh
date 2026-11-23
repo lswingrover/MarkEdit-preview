@@ -59,5 +59,5 @@ launchctl enable "$GUI_DOMAIN/$LABEL" 2>/dev/null || true
 
 echo "✅ Installed ${LABEL} — runs daily at 03:30."
 echo "   Plist:  ${PLIST}"
-echo "   State:  ${STATE_DIR}/  (status.md, watch.log, build.log)"
+echo "   State:  ${STATE_DIR}/  (status.md, watch.log)"
 echo "   Test now:  bash ${REPO}/scripts/upstream-watch.sh"

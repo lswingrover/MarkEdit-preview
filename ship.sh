@@ -19,6 +19,15 @@
 #
 # Version is only ever touched on a --push run — a plain build:deploy for
 # local testing never rewrites package.json.
+#
+# --push ships COMMITTED work only. Commit your changes first; --push then adds
+# a single ship commit holding just the version bump, CHANGELOG.md, and the
+# rebuilt dist/ bundles. It refuses to start if the working tree has untracked
+# files or uncommitted edits to tracked files.
+#
+# --push also needs a changelog helper: set MARKEDIT_CHANGELOG_SCRIPT to a
+# script that accepts `--repo <dir> --version <X.Y.Z>` and updates CHANGELOG.md.
+# To ship without a changelog entry on purpose, set MARKEDIT_SKIP_CHANGELOG=1.
 
 set -euo pipefail
 
@@ -104,43 +113,76 @@ if $DO_PUSH; then
   if [ -n "$UNTRACKED" ]; then
     echo "❌ Untracked files present; refusing to --push. Commit, remove, or ignore them first:" >&2
     printf '%s\n' "$UNTRACKED" | sed 's/^/    /' >&2
+    echo "    --push ships committed work only; it adds just the version bump, changelog, and bundles." >&2
     exit 1
   fi
   # Likewise refuse uncommitted edits to tracked files: an unrelated or debug
   # change would otherwise be built into dist/ and published under the ship.
   if ! git diff --quiet HEAD --; then
-    echo "❌ Uncommitted changes to tracked files; refusing to --push. Commit or stash them first:" >&2
+    echo "❌ Uncommitted changes to tracked files; refusing to --push:" >&2
     git diff --name-only HEAD -- | sed 's/^/    /' >&2
+    echo "    --push ships committed work only. Commit the work you want to ship (or stash" >&2
+    echo "    what you don't), then re-run; the ship commit adds just the version bump," >&2
+    echo "    CHANGELOG.md, and the rebuilt dist/ bundles." >&2
     exit 1
+  fi
+  # A ship without a changelog entry must be a deliberate choice, not the quiet
+  # result of a wrapper that forgot to configure the helper.
+  CHANGELOG_SCRIPT="${MARKEDIT_CHANGELOG_SCRIPT:-}"
+  if [ "${MARKEDIT_SKIP_CHANGELOG:-}" != "1" ]; then
+    if [ -z "$CHANGELOG_SCRIPT" ] || [ ! -f "$CHANGELOG_SCRIPT" ]; then
+      echo "❌ No changelog helper; refusing to --push." >&2
+      echo "    Set MARKEDIT_CHANGELOG_SCRIPT to a script that accepts" >&2
+      echo "    '--repo <dir> --version <X.Y.Z>' and updates CHANGELOG.md," >&2
+      echo "    or set MARKEDIT_SKIP_CHANGELOG=1 to ship without a changelog entry." >&2
+      exit 1
+    fi
   fi
 fi
 
 # ── 1. Version ─────────────────────────────────────────────────────────────────
 CURRENT_VERSION=$(node -p "require('./package.json').version")
 
+# Work out the version first and write package.json only after the tag check
+# below, so a refused ship leaves the working tree untouched.
 if [ -n "$EXPLICIT_VERSION" ]; then
   VERSION="$EXPLICIT_VERSION"
-  node -e "
-    const fs = require('fs');
-    const p = JSON.parse(fs.readFileSync('package.json', 'utf8'));
-    p.version = '${VERSION}';
-    fs.writeFileSync('package.json', JSON.stringify(p, null, 2) + '\n');
-  "
 elif $DO_PUSH && $ON_MAIN; then
   VERSION=$(node -e "
-    const fs = require('fs');
-    const p = JSON.parse(fs.readFileSync('package.json', 'utf8'));
-    const [ma, mi, pa] = p.version.split('.').map(Number);
-    let next;
-    if ('${BUMP_KIND}' === 'major') { next = (ma + 1) + '.0.0'; }
-    else if ('${BUMP_KIND}' === 'minor') { next = ma + '.' + (mi + 1) + '.0'; }
-    else { next = ma + '.' + mi + '.' + (pa + 1); }
-    p.version = next;
-    fs.writeFileSync('package.json', JSON.stringify(p, null, 2) + '\n');
-    console.log(next);
+    const [ma, mi, pa] = require('./package.json').version.split('.').map(Number);
+    if ('${BUMP_KIND}' === 'major') { console.log((ma + 1) + '.0.0'); }
+    else if ('${BUMP_KIND}' === 'minor') { console.log(ma + '.' + (mi + 1) + '.0'); }
+    else { console.log(ma + '.' + mi + '.' + (pa + 1)); }
   ")
 else
   VERSION="$CURRENT_VERSION"
+fi
+
+# Published release tags are never moved. A --push that would create a new
+# release (on main, or with --version) stops here, before building, if its tag
+# already exists. A --push from another branch without --version ships HEAD
+# under the current version; if that version is already tagged, the commit is
+# pushed untagged.
+CREATE_TAG=false
+if $DO_PUSH; then
+  if git rev-parse -q --verify "refs/tags/v${VERSION}" >/dev/null; then
+    if $ON_MAIN || [ -n "$EXPLICIT_VERSION" ]; then
+      echo "❌ Tag v${VERSION} already exists; refusing to --push. Pick another version (--version=X.Y.Z)." >&2
+      exit 1
+    fi
+    echo "⚠️  Tag v${VERSION} already exists; this ship's commit will be pushed untagged."
+  else
+    CREATE_TAG=true
+  fi
+fi
+
+if [ "$VERSION" != "$CURRENT_VERSION" ]; then
+  node -e "
+    const fs = require('fs');
+    const p = JSON.parse(fs.readFileSync('package.json', 'utf8'));
+    p.version = process.argv[1];
+    fs.writeFileSync('package.json', JSON.stringify(p, null, 2) + '\n');
+  " "$VERSION"
 fi
 
 # ── 1.5 Sync node_modules to the lockfile ──────────────────────────────────────
@@ -264,15 +306,14 @@ echo "✅  Build complete — deployed to MarkEdit scripts folder"
 if $DO_PUSH; then
   echo ""
   echo "📝 Changelog..."
-  # Optional external changelog helper. Set MARKEDIT_CHANGELOG_SCRIPT to the path
-  # of a script that accepts `--repo <dir> --version <X.Y.Z>` and updates
-  # CHANGELOG.md. When it is unset or missing, the ship continues without it.
-  CHANGELOG_SCRIPT="${MARKEDIT_CHANGELOG_SCRIPT:-}"
-  if [ -n "$CHANGELOG_SCRIPT" ] && [ -f "$CHANGELOG_SCRIPT" ]; then
-    CHANGELOG_NOTES=$(python3 "$CHANGELOG_SCRIPT" --repo . --version "$VERSION" || true)
+  # External changelog helper from MARKEDIT_CHANGELOG_SCRIPT (checked before
+  # the build). MARKEDIT_SKIP_CHANGELOG=1 skips it on purpose.
+  if [ "${MARKEDIT_SKIP_CHANGELOG:-}" = "1" ]; then
+    echo "  (MARKEDIT_SKIP_CHANGELOG=1; no changelog entry for this ship)"
+  elif CHANGELOG_NOTES=$(python3 "$CHANGELOG_SCRIPT" --repo . --version "$VERSION"); then
     echo "$CHANGELOG_NOTES" | sed 's/^/  /'
   else
-    echo "  (no changelog helper configured; set MARKEDIT_CHANGELOG_SCRIPT to use one; skipping)"
+    echo "  ⚠️  changelog helper failed; shipping without a new CHANGELOG.md entry"
   fi
 fi
 
@@ -285,15 +326,16 @@ if $DO_PUSH; then
   # else out of the public commit regardless.
   git add -- package.json CHANGELOG.md dist/markedit-preview.js dist/lite/markedit-preview.js
   git commit -m "ship markedit-preview v${VERSION}" 2>/dev/null || echo "  (nothing to commit)"
-  # Never move an existing tag: published release tags are not rewritten.
-  if git rev-parse -q --verify "refs/tags/v${VERSION}" >/dev/null; then
-    echo "  ⚠️  tag v${VERSION} already exists; leaving it where it is"
-  else
-    git tag "v${VERSION}"
-  fi
   git push 2>/dev/null || echo "  (no remote configured)"
-  git push origin "refs/tags/v${VERSION}" 2>/dev/null || echo "  (tag push failed or no remote)"
-  echo "✅  Pushed v${VERSION}"
+  # Existing tags were checked before the build; only a new tag is created and
+  # pushed, never moved or forced.
+  if $CREATE_TAG; then
+    git tag "v${VERSION}"
+    git push origin "refs/tags/v${VERSION}" 2>/dev/null || echo "  (tag push failed or no remote)"
+    echo "✅  Pushed v${VERSION}"
+  else
+    echo "✅  Pushed (untagged; v${VERSION} already exists)"
+  fi
 fi
 
 # ── 7. Reload MarkEdit ──────────────────────────────────────────────────────────
