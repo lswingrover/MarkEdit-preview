@@ -4,7 +4,7 @@ A downstream fork of [MarkEdit-app/MarkEdit-preview](https://github.com/MarkEdit
 
 - **Lock-step scroll sync** — editor and preview track each other in real time, every animation frame, using RAF. No lag, no post-scroll drift. Upstream uses `scrollend` (fires after momentum stops); this fires on every `scroll` event.
 - **WYSIWYG editing** — the preview pane becomes directly editable with a sticky formatting toolbar. Edits convert back to Markdown via Turndown (GFM-aware) and sync to the CodeMirror source. Active by default.
-- **Print Rendered…** — prints the styled preview HTML (not raw Markdown) via the system print dialog. Available under **Extensions → View Mode**. Writes a temporary `~/.markedit-print.html` dotfile, opens it in the default browser, which shows the print dialog immediately on load and auto-closes the tab when done.
+- **Print Rendered…** — prints the styled preview HTML (not raw Markdown) via the system print dialog. Available under **Extensions → View Mode**. Writes a temporary `~/.markedit-print-<random>.html` dotfile (deleted a minute later), opens it in the default browser, which shows the print dialog immediately on load and auto-closes the tab when done.
 - **Quick Look opens rendered** — pressing Space on a `.md` file in Finder shows formatted markdown, not raw source. Upstream opens on source and remembers a toggle in `localStorage`; the Quick Look WebView has no persistent `localStorage`, so that toggle never sticks.
 
 These are deliberate upstream non-features, not oversights. This fork exists for users who want them anyway.
@@ -33,7 +33,7 @@ A short-lived lock keeps the two directions from echoing each other: a programma
 Generates the same styled HTML as *Save Styled HTML* but instead of saving a file, it:
 
 1. Injects `window.print()` on `load` and `window.close()` on `afterprint` into the document
-2. Writes the result to `~/.markedit-print.html` (a hidden dotfile — never clutters your filesystem)
+2. Writes the result to a per-print hidden dotfile, `~/.markedit-print-<random>.html`, and deletes it a minute after opening (on hosts without `MarkEdit.deleteFile`, a single `~/.markedit-print.html` is reused instead)
 3. Opens it in your default browser via `runService('Open URL', ...)`
 
 The browser shows the macOS print dialog immediately. When you dismiss it (print or cancel), the tab closes automatically.
@@ -146,10 +146,9 @@ The version is pinned ahead of upstream to prevent MarkEdit's built-in auto-upda
 
 The extension no longer checks for upstream releases itself: upstream dropped its in-extension updater, and this fork's own update alert was removed in 1.11.1. Syncing is a watch-and-land flow driven by scripts in this repo:
 
-1. `bash scripts/install-upstream-watch.sh` installs a daily launchd job that runs `scripts/upstream-watch.sh`. It fetches `upstream`; if there is anything new, it attempts the merge in a sibling worktree (`<checkout>-wt-upstream-sync`, branch `upstream-sync`), builds the full variant when the merge is clean, and posts a notification. It never touches your main checkout, never deploys, and never lands anything. Because this fork changes many of the same files as upstream, conflicts are the common case (most likely in `src/scroll.ts` or `main.ts`); they are left staged in that worktree for you to resolve.
-2. `bash scripts/upstream-land.sh` fast-forwards `main` to the vetted merge and stops there. Deploy, version bump, tag, and push are a separate `ship.sh` step (see [Fork maintenance](#fork-maintenance)).
+1. `bash scripts/install-upstream-watch.sh` installs a daily launchd job that runs `scripts/upstream-watch.sh`. It fetches `upstream`; if there is anything new, it attempts the merge in a sibling worktree (`<checkout>-wt-upstream-sync`, branch `upstream-sync`) and posts a notification listing the upstream changes, calling out files that run code at install or build time (`package.json`, `yarn.lock`, configs, `patches/`). It never runs `yarn install` or `yarn build`, never touches your main checkout, never deploys, and never lands anything: after a merge those steps run upstream-controlled code, so they wait until you have reviewed the diff and run them yourself in that worktree. Because this fork changes many of the same files as upstream, conflicts are the common case (most likely in `src/scroll.ts` or `main.ts`); they are left staged in that worktree for you to resolve.
+2. After reviewing and building in the worktree, `bash scripts/upstream-land.sh` fast-forwards `main` to the merge and stops there. Deploy, version bump, tag, and push are a separate `ship.sh` step (see [Fork maintenance](#fork-maintenance)).
 
-`update.sh` is the manual escape hatch: it merges `upstream/main` straight into your current checkout, runs the full `yarn build`, copies the result to the scripts folder, and restarts MarkEdit. It has no conflict vetting and no build gate, so prefer the flow above.
 
 ---
 
